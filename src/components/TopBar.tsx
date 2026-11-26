@@ -2,9 +2,16 @@
 
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Coffee, Moon, Sun, Volume2, VolumeX } from "lucide-react";
+import { Coffee, Moon, Sun, Volume2, VolumeX } from "lucide-react";
 import { useTheme } from "@/components/ThemeProvider";
 import { soundEngine } from "@/lib/audio";
+import {
+  Breadcrumbs,
+  Button,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui";
 
 interface TopBarProps {
   backHref?: string;
@@ -12,7 +19,7 @@ interface TopBarProps {
   title?: string;
 }
 
-export function TopBar({ backHref, backLabel = "Hub", title }: TopBarProps) {
+export function TopBar({ backHref, title }: TopBarProps) {
   const { theme, toggleTheme } = useTheme();
   const [muted, setMuted] = useState(false);
 
@@ -30,66 +37,90 @@ export function TopBar({ backHref, backLabel = "Hub", title }: TopBarProps) {
   };
 
   return (
-    <header className="w-full max-w-5xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between gap-4">
-      <div className="flex items-center gap-3">
-        {backHref ? (
+    <header className="sticky top-0 z-[var(--sys-z-sticky,100)] w-full px-4 sm:px-6 pt-3">
+      <div className="max-w-5xl mx-auto liquid-glass-regular rounded-2xl px-4 py-2.5 flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3 min-w-0">
           <Link
-            href={backHref}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium border border-[var(--border-subtle)] bg-[var(--surface)] text-[var(--ink-muted)] hover:text-[var(--ink)] hover:border-[var(--border-strong)] transition-colors"
+            href="/"
+            className="inline-flex items-center gap-2.5 group shrink-0"
           >
-            <ArrowLeft className="w-4 h-4" />
-            <span>{backLabel}</span>
-          </Link>
-        ) : (
-          <Link href="/" className="inline-flex items-center gap-2.5 group">
-            <span className="w-9 h-9 rounded-xl bg-[var(--accent-emerald-soft)] text-[var(--accent-emerald)] flex items-center justify-center border border-[var(--accent-emerald)]/20 group-hover:scale-105 transition-transform">
+            <span className="w-9 h-9 rounded-xl bg-[var(--sys-color-bg-action-primary-subtle)] text-[var(--sys-color-action-primary)] flex items-center justify-center border border-[var(--sys-color-border-focus)]/25 group-hover:scale-105 transition-transform">
               <Coffee className="w-4 h-4" />
             </span>
-            <span className="font-[family-name:var(--font-plus-jakarta)] font-semibold tracking-tight text-base text-[var(--ink)]">
+            <span className="font-semibold tracking-tight text-sm sm:text-base text-[var(--sys-color-text-primary)]">
               Coffee Break
             </span>
           </Link>
-        )}
 
-        {title && (
-          <span className="hidden sm:inline-block text-sm font-medium text-[var(--ink-muted)] pl-2 border-l border-[var(--border-subtle)]">
-            {title}
-          </span>
-        )}
-      </div>
-
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={handleToggleMute}
-          aria-label={muted ? "Unmute sound effects" : "Mute sound effects"}
-          title={muted ? "Unmute sound effects" : "Mute sound effects"}
-          className="w-9 h-9 rounded-full border border-[var(--border-subtle)] bg-[var(--surface)] text-[var(--ink-muted)] hover:text-[var(--ink)] hover:border-[var(--border-strong)] flex items-center justify-center transition-colors cursor-pointer"
-        >
-          {muted ? (
-            <VolumeX className="w-4 h-4" />
-          ) : (
-            <Volume2 className="w-4 h-4" />
+          {backHref && title && (
+            <div className="hidden sm:block pl-3 border-l border-[var(--sys-color-border-subtle)]">
+              <Breadcrumbs
+                items={[
+                  { label: "Hub", href: backHref },
+                  { label: title },
+                ]}
+              />
+            </div>
           )}
-        </button>
+        </div>
 
-        <button
-          type="button"
-          onClick={toggleTheme}
-          aria-label={
-            theme === "dark" ? "Switch to light theme" : "Switch to dark theme"
-          }
-          title={
-            theme === "dark" ? "Switch to light theme" : "Switch to dark theme"
-          }
-          className="w-9 h-9 rounded-full border border-[var(--border-subtle)] bg-[var(--surface)] text-[var(--ink-muted)] hover:text-[var(--ink)] hover:border-[var(--border-strong)] flex items-center justify-center transition-colors cursor-pointer"
-        >
-          {theme === "dark" ? (
-            <Sun className="w-4 h-4" />
-          ) : (
-            <Moon className="w-4 h-4" />
-          )}
-        </button>
+        <div className="flex items-center gap-2">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={handleToggleMute}
+                aria-label={
+                  muted ? "Unmute sound effects" : "Mute sound effects"
+                }
+                className="w-10 px-0"
+              >
+                {muted ? (
+                  <VolumeX className="w-4 h-4" />
+                ) : (
+                  <Volume2 className="w-4 h-4" />
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              {muted ? "Unmute sound effects" : "Mute sound effects"}
+            </TooltipContent>
+          </Tooltip>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={toggleTheme}
+                aria-label={
+                  theme === "dark"
+                    ? "Switch to Alabaster Light theme"
+                    : "Switch to Obsidian Dark theme"
+                }
+                className="gap-1.5"
+              >
+                {theme === "dark" ? (
+                  <>
+                    <Sun className="w-4 h-4" />
+                    <span className="hidden sm:inline">Light</span>
+                  </>
+                ) : (
+                  <>
+                    <Moon className="w-4 h-4" />
+                    <span className="hidden sm:inline">Dark</span>
+                  </>
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              {theme === "dark"
+                ? "Switch to Alabaster Light"
+                : "Switch to Obsidian Dark"}
+            </TooltipContent>
+          </Tooltip>
+        </div>
       </div>
     </header>
   );

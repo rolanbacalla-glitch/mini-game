@@ -12,7 +12,7 @@ export default function LoomAndLatchPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen flex items-center justify-center text-sm text-[var(--ink-muted)]">
+        <div className="min-h-screen flex items-center justify-center text-sm text-[var(--sys-color-text-muted)]">
           Setting up today&apos;s loom…
         </div>
       }

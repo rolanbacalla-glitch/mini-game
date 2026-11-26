@@ -1,24 +1,24 @@
 import type { Metadata } from "next";
-import { DM_Sans, Plus_Jakarta_Sans } from "next/font/google";
+import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/ThemeProvider";
 
-const dmSans = DM_Sans({
+const geistSans = Geist({
+  variable: "--font-geist-sans",
   subsets: ["latin"],
-  variable: "--font-dm-sans",
   display: "swap",
 });
 
-const plusJakartaSans = Plus_Jakarta_Sans({
+const geistMono = Geist_Mono({
+  variable: "--font-geist-mono",
   subsets: ["latin"],
-  variable: "--font-plus-jakarta",
   display: "swap",
 });
 
 export const metadata: Metadata = {
   title: "Coffee Break — Restorative 3-Minute Browser Games",
   description:
-    "A calm collection of tactile, 2-to-4-minute daily browser puzzles designed for genuine psychological detachment between work sessions.",
+    "A calm collection of tactile, 2-to-4-minute daily browser puzzles built with the Antigravity v3.0 Design System.",
 };
 
 export default function RootLayout({
@@ -29,10 +29,18 @@ export default function RootLayout({
   return (
     <html
       lang="en-GB"
+      data-theme="light"
       suppressHydrationWarning
-      className={`${dmSans.variable} ${plusJakartaSans.variable}`}
+      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-screen paper-grain antialiased">
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem('antigravity-theme');if(t==='dark'||t==='light'){document.documentElement.setAttribute('data-theme',t);document.documentElement.classList.toggle('dark',t==='dark');}}catch(e){}})();`,
+          }}
+        />
+      </head>
+      <body className="min-h-full bg-[var(--sys-color-surface-canvas)] text-[var(--sys-color-text-primary)] font-sans clerk-dot-canvas selection:bg-[var(--sys-color-bg-action-primary-subtle)] selection:text-[var(--sys-color-text-primary)]">
         <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>

@@ -8,6 +8,7 @@ import {
   Check,
   Copy,
   Flame,
+  HelpCircle,
   Lightbulb,
   RotateCw,
   Shuffle,
@@ -15,6 +16,22 @@ import {
   Trash2,
 } from "lucide-react";
 import { TopBar } from "@/components/TopBar";
+import {
+  Badge,
+  Button,
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+  DialogTrigger,
+  ProgressBar,
+  Tabs,
+  TabsList,
+  TabsTrigger,
+  ToastStack,
+  type ToastItem,
+} from "@/components/ui";
 import { soundEngine } from "@/lib/audio";
 import { formatShortBritishDate, getTodayKey } from "@/lib/games";
 import {
@@ -48,8 +65,6 @@ function computeCentredOrigin(
   const rotated = rotateCells(piece.solutionCells, rotation);
   const { rows, cols } = getPieceDimensions(rotated);
 
-  // If the piece has an eyelet and the user hovers directly over its matching peg,
-  // snap the origin so the eyelet aligns right onto the peg!
   const rawRow = targetCell.row - Math.floor(rows / 2);
   const rawCol = targetCell.col - Math.floor(cols / 2);
 
@@ -93,12 +108,12 @@ function MiniPiecePreview({
               key={`${r}-${c}`}
               style={{
                 backgroundColor: piece.colour.fill,
-                boxShadow: `inset 0 1px 0 rgba(255,255,255,0.28), inset 0 -1.5px 0 ${piece.colour.stroke}`,
+                boxShadow: `inset 0 1px 0 var(--sys-specular-top), inset 0 -1.5px 0 ${piece.colour.stroke}`,
               }}
               className="rounded-[5px] relative flex items-center justify-center"
             >
               {isEyelet && (
-                <span className="w-2.5 h-2.5 rounded-full bg-[var(--bg-paper)] ring-2 ring-white/90 shadow-xs" />
+                <span className="w-2.5 h-2.5 rounded-full bg-[var(--sys-color-surface-lowest)] ring-2 ring-[var(--sys-color-surface-lowest)]/90 shadow-xs" />
               )}
             </div>
           );
@@ -137,6 +152,26 @@ export function LoomAndLatchGame() {
   const [solved, setSolved] = useState<boolean>(false);
   const [copied, setCopied] = useState<boolean>(false);
   const [stats, setStats] = useState<LoomStats | null>(null);
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
+
+  const pushToast = useCallback(
+    (title: string, description?: string, tone: ToastItem["tone"] = "info") => {
+      const id = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      const timestamp = new Date().toLocaleTimeString("en-GB", {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      setToasts((prev) => [...prev.slice(-2), { id, title, description, tone, timestamp }]);
+      window.setTimeout(() => {
+        setToasts((prev) => prev.filter((t) => t.id !== id));
+      }, 3200);
+    },
+    []
+  );
+
+  const dismissToast = useCallback((id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
 
   // Reset board cleanly whenever the puzzle seed changes
   useEffect(() => {
@@ -210,8 +245,6 @@ export function LoomAndLatchGame() {
   const ghostPreview = useMemo(() => {
     if (!selectedPiece || !hoverCell || solved) return null;
 
-    // Smart magnetic assist: if hovering directly on a matching peg for this piece,
-    // snap the eyelet onto that peg!
     const pegAtHover = puzzle.pegs.find(
       (p) =>
         p.row === hoverCell.row &&
@@ -252,7 +285,6 @@ export function LoomAndLatchGame() {
     solved,
   ]);
 
-  // Build quick lookup of placed cells on the 5×5 board
   const boardOccupancy = useMemo(() => {
     const map = new Map<
       string,
@@ -287,7 +319,6 @@ export function LoomAndLatchGame() {
   const handleCellClick = (row: number, col: number) => {
     if (solved) return;
 
-    // If a piece is currently selected, try to place it here
     if (selectedPiece) {
       const pegAtCell = puzzle.pegs.find(
         (p) => p.row === row && p.col === col && p.pieceId === selectedPiece.id
@@ -358,9 +389,15 @@ export function LoomAndLatchGame() {
               completedAt: new Date().toISOString(),
             });
             setStats(updated);
+            pushToast(
+              "Daily ritual complete",
+              `Solved in ${formatDuration(elapsedSeconds)} with ${nextMoves} snaps.`,
+              "success"
+            );
           } else {
             const updated = recordZenCompletion();
             setStats(updated);
+            pushToast("Zen loom complete", `${nextMoves} snaps.`, "success");
           }
         } else {
           if (check.latchedPeg) {
@@ -368,15 +405,12 @@ export function LoomAndLatchGame() {
           } else {
             soundEngine.playSnap();
           }
-          // Auto-select the next unplaced piece for effortless flow
           const nextUnplaced = puzzle.pieces.find((p) => !nextPlaced[p.id]);
           setSelectedPieceId(nextUnplaced?.id ?? null);
         }
         return;
       }
 
-      // If the user clicked on an already-placed piece instead of a valid empty spot,
-      // lift that placed piece up for easy repositioning
       const existing = boardOccupancy.get(`${row},${col}`);
       if (existing) {
         const liftedState = placedPieces[existing.piece.id];
@@ -396,7 +430,6 @@ export function LoomAndLatchGame() {
       return;
     }
 
-    // No piece selected: clicking a placed piece lifts it back into hand
     const existing = boardOccupancy.get(`${row},${col}`);
     if (existing) {
       const liftedState = placedPieces[existing.piece.id];
@@ -415,7 +448,6 @@ export function LoomAndLatchGame() {
   const handleTrayPieceClick = (pieceId: string) => {
     if (solved) return;
     if (selectedPieceId === pieceId) {
-      // Tapping an already-selected piece rotates it 90° clockwise
       handleRotateSelected();
     } else {
       setSelectedPieceId(pieceId);
@@ -431,6 +463,7 @@ export function LoomAndLatchGame() {
     setHintPieceColour(null);
     setSelectedPieceId(puzzle.pieces[0]?.id ?? null);
     setSolved(false);
+    pushToast("Board cleared", "All tiles returned to the tray.", "info");
   };
 
   const handleGentleNudge = () => {
@@ -452,6 +485,11 @@ export function LoomAndLatchGame() {
     setHintPieceColour(target.colour.fill);
     setUsedHint(true);
     soundEngine.playPickup();
+    pushToast(
+      "Gentle nudge",
+      `Aligned ${target.colour.name} tile — look for the pulsing silhouette.`,
+      "info"
+    );
 
     window.setTimeout(() => {
       setHintCells(null);
@@ -471,9 +509,10 @@ export function LoomAndLatchGame() {
       await navigator.clipboard.writeText(shareText);
       setCopied(true);
       soundEngine.playPickup();
+      pushToast("Result copied", "Spoiler-free mosaic copied to clipboard.", "success");
       window.setTimeout(() => setCopied(false), 2200);
     } catch {
-      // Clipboard may be unavailable in restricted contexts
+      pushToast("Copy unavailable", "Clipboard access was blocked by the browser.", "warning");
     }
   };
 
@@ -482,80 +521,111 @@ export function LoomAndLatchGame() {
 
   return (
     <div className="min-h-screen flex flex-col">
-      <TopBar backHref="/" backLabel="All games" title="Loom & Latch" />
+      <TopBar backHref="/" title="Loom & Latch" />
 
-      <main className="flex-1 w-full max-w-3xl mx-auto px-4 sm:px-6 pt-2 pb-16 flex flex-col items-center">
-        {/* Mode Switcher & Subtle Meta */}
+      <main className="flex-1 w-full max-w-3xl mx-auto px-4 sm:px-6 pt-5 pb-16 flex flex-col items-center">
+        {/* Mode Switcher (Antigravity Tabs) & Status Badges */}
         <div className="w-full flex flex-wrap items-center justify-between gap-3 mb-5">
-          <div className="inline-flex p-1 rounded-full bg-[var(--board-well)] border border-[var(--border-subtle)]">
-            <button
-              type="button"
-              onClick={() => setMode("daily")}
-              className={`px-3.5 py-1.5 rounded-full text-xs font-medium transition-colors cursor-pointer ${
-                mode === "daily"
-                  ? "bg-[var(--surface)] text-[var(--ink)] shadow-xs"
-                  : "text-[var(--ink-muted)] hover:text-[var(--ink)]"
-              }`}
-            >
-              Daily Ritual
-            </button>
-            <button
-              type="button"
-              onClick={() => setMode("zen")}
-              className={`px-3.5 py-1.5 rounded-full text-xs font-medium transition-colors cursor-pointer ${
-                mode === "zen"
-                  ? "bg-[var(--surface)] text-[var(--ink)] shadow-xs"
-                  : "text-[var(--ink-muted)] hover:text-[var(--ink)]"
-              }`}
-            >
-              Zen Mode
-            </button>
-          </div>
+          <Tabs
+            value={mode}
+            onValueChange={(v) => setMode(v as GameMode)}
+          >
+            <TabsList aria-label="Game mode">
+              <TabsTrigger value="daily">Daily Ritual</TabsTrigger>
+              <TabsTrigger value="zen">Zen Mode</TabsTrigger>
+            </TabsList>
+          </Tabs>
 
-          <div className="flex items-center gap-3 text-xs font-medium text-[var(--ink-muted)]">
+          <div className="flex flex-wrap items-center gap-2">
             {mode === "daily" ? (
               <>
-                <span>{formatShortBritishDate(todayKey)}</span>
-                <span className="tabular-nums">
+                <Badge tone="neutral">{formatShortBritishDate(todayKey)}</Badge>
+                <Badge tone="accent" className="font-mono tabular-nums">
                   {formatDuration(elapsedSeconds)}
-                </span>
+                </Badge>
                 {stats && stats.currentStreak > 0 && (
-                  <span className="inline-flex items-center gap-1 text-[var(--accent-emerald)]">
+                  <Badge tone="success" className="font-mono tabular-nums">
                     <Flame className="w-3.5 h-3.5" />
                     {stats.currentStreak}
-                  </span>
+                  </Badge>
                 )}
               </>
             ) : (
-              <button
-                type="button"
+              <Button
+                variant="secondary"
+                size="sm"
                 onClick={() => {
                   soundEngine.playClear();
                   setZenCounter((n) => n + 1);
                 }}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-[var(--border-subtle)] bg-[var(--surface)] text-[var(--ink)] hover:border-[var(--border-strong)] transition-colors cursor-pointer"
               >
                 <Shuffle className="w-3.5 h-3.5" />
-                New Zen loom
-              </button>
+                <span>New Zen loom</span>
+              </Button>
             )}
+
+            <Dialog>
+              <DialogTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  aria-label="How to play Loom & Latch"
+                  className="w-10 px-0"
+                >
+                  <HelpCircle className="w-4 h-4" />
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogTitle>How to play Loom &amp; Latch</DialogTitle>
+                <DialogDescription>
+                  Fill the 5×5 loom completely using every tile in the tray.
+                </DialogDescription>
+                <ul className="mt-4 space-y-2.5 text-sm text-[var(--sys-color-text-secondary)] list-disc pl-5">
+                  <li>
+                    Tiles with a <strong>hollow eyelet</strong> must latch directly onto
+                    their matching coloured peg on the board.
+                  </li>
+                  <li>
+                    Tap a selected tile again, click <strong>Rotate</strong>, right-click,
+                    or press <kbd className="font-mono px-1.5 py-0.5 rounded bg-[var(--sys-color-surface-low)] border border-[var(--sys-color-border-subtle)] text-xs">R</kbd> to rotate 90° clockwise.
+                  </li>
+                  <li>
+                    Click any placed tile on the board to lift and reposition it.
+                  </li>
+                </ul>
+                <div className="mt-6 flex justify-end">
+                  <DialogClose asChild>
+                    <Button variant="primary">Got it</Button>
+                  </DialogClose>
+                </div>
+              </DialogContent>
+            </Dialog>
           </div>
         </div>
 
-        {/* One-line Zero-Friction Visual Cue */}
-        <div className="w-full flex items-center justify-between text-xs text-[var(--ink-muted)] mb-3 px-1">
-          <span>
-            Match each brass eyelet to its coloured peg &amp; fill the 5×5 loom.
-          </span>
-          <span className="shrink-0 ml-2 tabular-nums">
-            {placedCount}/{puzzle.pieces.length} tiles · {latchedCount}/
-            {puzzle.pegs.length} latched
-          </span>
+        {/* Progress Bar & Latched Peg Readout */}
+        <div className="w-full mb-4 space-y-2">
+          <div className="flex items-center justify-between gap-2 text-xs text-[var(--sys-color-text-secondary)]">
+            <span>
+              Match each eyelet to its coloured peg &amp; fill the 5×5 loom.
+            </span>
+            <Badge
+              tone={latchedCount === puzzle.pegs.length ? "success" : "neutral"}
+              className="shrink-0 font-mono tabular-nums"
+            >
+              {latchedCount}/{puzzle.pegs.length} latched
+            </Badge>
+          </div>
+          <ProgressBar
+            value={placedCount}
+            max={puzzle.pieces.length}
+            label="Loom completion"
+          />
         </div>
 
-        {/* 5×5 Tactile Loom Board */}
+        {/* 5×5 Tactile Loom Board — Solid Tonal Surface */}
         <div
-          className="w-full max-w-[380px] aspect-square rounded-[28px] p-3.5 sm:p-4 bg-[var(--board-well)] border border-[var(--border-subtle)] shadow-[var(--shadow-soft)] select-none"
+          className="w-full max-w-[388px] aspect-square tonal-card-elevated rounded-[24px] p-3.5 sm:p-4 select-none"
           onMouseLeave={() => setHoverCell(null)}
           onContextMenu={(e) => {
             e.preventDefault();
@@ -588,17 +658,17 @@ export function LoomAndLatchGame() {
                     onMouseEnter={() => setHoverCell({ row, col })}
                     onFocus={() => setHoverCell({ row, col })}
                     onClick={() => handleCellClick(row, col)}
-                    className="relative rounded-xl border transition-all duration-150 flex items-center justify-center cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-emerald)]"
+                    className="relative rounded-xl border transition-all duration-150 flex items-center justify-center cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sys-color-border-focus)]"
                     style={{
                       backgroundColor: occupied
                         ? occupied.piece.colour.fill
-                        : "var(--cell-empty)",
+                        : "var(--sys-color-surface-lowest)",
                       borderColor: occupied
                         ? occupied.piece.colour.stroke
-                        : "var(--cell-border)",
+                        : "var(--sys-color-border-subtle)",
                       boxShadow: occupied
-                        ? `inset 0 2px 0 rgba(255,255,255,0.28), 0 2px 6px rgba(16,22,28,0.12)`
-                        : "inset 0 1px 2px rgba(16,22,28,0.05)",
+                        ? "inset 0 2px 0 var(--sys-specular-top)"
+                        : undefined,
                     }}
                   >
                     {/* Magnetic Ghost Preview */}
@@ -608,11 +678,11 @@ export function LoomAndLatchGame() {
                         style={{
                           backgroundColor: ghostPreview.valid
                             ? selectedPiece?.colour.fill
-                            : "#e06c65",
+                            : "var(--sys-color-feedback-error)",
                           opacity: ghostPreview.valid ? 0.36 : 0.28,
                           border: ghostPreview.valid
                             ? `2px solid ${selectedPiece?.colour.fill}`
-                            : "2px dashed #e06c65",
+                            : "2px dashed var(--sys-color-border-error)",
                         }}
                       />
                     )}
@@ -621,11 +691,15 @@ export function LoomAndLatchGame() {
                     {isHintCell && !occupied && (
                       <motion.span
                         initial={{ opacity: 0.2, scale: 0.92 }}
-                        animate={{ opacity: [0.25, 0.55, 0.25], scale: [0.95, 1, 0.95] }}
+                        animate={{
+                          opacity: [0.25, 0.55, 0.25],
+                          scale: [0.95, 1, 0.95],
+                        }}
                         transition={{ duration: 1.1, repeat: Infinity }}
                         className="absolute inset-0.5 rounded-lg pointer-events-none"
                         style={{
-                          backgroundColor: hintPieceColour ?? "#2ca884",
+                          backgroundColor:
+                            hintPieceColour ?? "var(--sys-color-action-primary)",
                         }}
                       />
                     )}
@@ -635,7 +709,7 @@ export function LoomAndLatchGame() {
                       <span
                         className="w-5 h-5 rounded-full flex items-center justify-center pointer-events-none"
                         style={{
-                          backgroundColor: `${peg.colour.fill}26`,
+                          backgroundColor: "var(--sys-color-surface-container)",
                           border: `2.5px solid ${peg.colour.fill}`,
                         }}
                       >
@@ -646,13 +720,17 @@ export function LoomAndLatchGame() {
                       </span>
                     )}
 
-                    {/* Latched Brass Eyelet (occupied) */}
+                    {/* Latched Eyelet (occupied) */}
                     {occupied && occupied.isEyelet && (
                       <motion.span
                         initial={{ scale: 0.6 }}
                         animate={{ scale: 1 }}
-                        transition={{ type: "spring", stiffness: 420, damping: 22 }}
-                        className="w-5 h-5 rounded-full bg-[var(--bg-paper)] ring-2 ring-white/95 shadow-sm flex items-center justify-center pointer-events-none"
+                        transition={{
+                          type: "spring",
+                          stiffness: 420,
+                          damping: 22,
+                        }}
+                        className="w-5 h-5 rounded-full bg-[var(--sys-color-surface-lowest)] ring-2 ring-[var(--sys-color-surface-lowest)]/90 shadow-sm flex items-center justify-center pointer-events-none"
                       >
                         {peg && peg.pieceId === occupied.piece.id && (
                           <span
@@ -669,40 +747,34 @@ export function LoomAndLatchGame() {
           </div>
         </div>
 
-        {/* Action Controls */}
+        {/* Action Controls — Antigravity Expressive Buttons */}
         {!solved && (
           <div className="mt-5 flex flex-wrap items-center justify-center gap-2.5">
-            <button
-              type="button"
+            <Button
+              variant="secondary"
               onClick={handleRotateSelected}
               disabled={!selectedPieceId}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium bg-[var(--surface)] border border-[var(--border-subtle)] text-[var(--ink)] hover:border-[var(--border-strong)] disabled:opacity-45 transition-colors cursor-pointer"
             >
               <RotateCw className="w-4 h-4" />
               <span>Rotate</span>
-              <kbd className="hidden sm:inline-block ml-1 px-1.5 py-0.5 text-[10px] rounded bg-[var(--bg-canvas)] text-[var(--ink-muted)]">
+              <kbd className="hidden sm:inline-block ml-1 px-1.5 py-0.5 font-mono text-[10px] rounded bg-[var(--sys-color-surface-container)] text-[var(--sys-color-text-muted)]">
                 R
               </kbd>
-            </button>
+            </Button>
 
-            <button
-              type="button"
-              onClick={handleGentleNudge}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-medium bg-[var(--surface)] border border-[var(--border-subtle)] text-[var(--ink-muted)] hover:text-[var(--ink)] hover:border-[var(--border-strong)] transition-colors cursor-pointer"
-            >
+            <Button variant="secondary" onClick={handleGentleNudge}>
               <Lightbulb className="w-4 h-4" />
               <span>Nudge</span>
-            </button>
+            </Button>
 
-            <button
-              type="button"
+            <Button
+              variant="danger"
               onClick={handleClearBoard}
               disabled={placedCount === 0}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-medium bg-[var(--surface)] border border-[var(--border-subtle)] text-[var(--ink-muted)] hover:text-[var(--ink)] hover:border-[var(--border-strong)] disabled:opacity-40 transition-colors cursor-pointer"
             >
               <Trash2 className="w-4 h-4" />
               <span>Clear</span>
-            </button>
+            </Button>
           </div>
         )}
 
@@ -714,27 +786,41 @@ export function LoomAndLatchGame() {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 8 }}
               transition={{ type: "spring", stiffness: 300, damping: 26 }}
-              className="mt-6 w-full max-w-[420px] rounded-3xl border border-[var(--accent-emerald)]/35 bg-[var(--surface)] p-6 shadow-[var(--shadow-soft)] text-center"
+              className="mt-6 w-full max-w-[440px] tonal-card p-6 border-[var(--sys-color-feedback-success)] text-center"
             >
-              <div className="w-11 h-11 rounded-2xl bg-[var(--accent-emerald-soft)] text-[var(--accent-emerald)] flex items-center justify-center mx-auto mb-3">
+              <div className="w-11 h-11 rounded-2xl bg-[var(--sys-color-feedback-success-bg)] text-[var(--sys-color-feedback-success)] flex items-center justify-center mx-auto mb-3">
                 <Sparkles className="w-5 h-5" />
               </div>
 
-              <h2 className="font-[family-name:var(--font-plus-jakarta)] text-xl font-semibold text-[var(--ink)]">
+              <h2 className="text-xl font-semibold text-[var(--sys-color-text-primary)]">
                 Loom complete.
               </h2>
-              <p className="mt-1 text-sm text-[var(--ink-muted)]">
-                {mode === "daily"
-                  ? `Solved in ${formatDuration(elapsedSeconds)} with ${moves} snaps. Take a breath — your break is done.`
-                  : `Sorted in ${moves} snaps. Smooth, quiet closure.`}
+              <p className="mt-1 text-sm text-[var(--sys-color-text-secondary)]">
+                {mode === "daily" ? (
+                  <>
+                    Solved in{" "}
+                    <span className="font-mono tabular-nums font-medium text-[var(--sys-color-text-primary)]">
+                      {formatDuration(elapsedSeconds)}
+                    </span>{" "}
+                    with{" "}
+                    <span className="font-mono tabular-nums font-medium text-[var(--sys-color-text-primary)]">
+                      {moves}
+                    </span>{" "}
+                    snaps. Take a breath — your break is done.
+                  </>
+                ) : (
+                  <>
+                    Sorted in{" "}
+                    <span className="font-mono tabular-nums font-medium text-[var(--sys-color-text-primary)]">
+                      {moves}
+                    </span>{" "}
+                    snaps. Smooth, quiet closure.
+                  </>
+                )}
               </p>
 
               <div className="mt-5 flex flex-wrap items-center justify-center gap-2.5">
-                <button
-                  type="button"
-                  onClick={handleCopyShare}
-                  className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-medium bg-[var(--ink)] text-[var(--bg-paper)] hover:opacity-90 transition-opacity cursor-pointer"
-                >
+                <Button variant="primary" onClick={handleCopyShare}>
                   {copied ? (
                     <>
                       <Check className="w-4 h-4" />
@@ -746,36 +832,28 @@ export function LoomAndLatchGame() {
                       <span>Copy result</span>
                     </>
                   )}
-                </button>
+                </Button>
 
                 {mode === "daily" ? (
-                  <button
-                    type="button"
-                    onClick={() => setMode("zen")}
-                    className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-medium border border-[var(--border-subtle)] text-[var(--ink)] hover:border-[var(--border-strong)] transition-colors cursor-pointer"
-                  >
+                  <Button variant="secondary" onClick={() => setMode("zen")}>
                     <Shuffle className="w-4 h-4" />
                     <span>Try Zen Mode</span>
-                  </button>
+                  </Button>
                 ) : (
-                  <button
-                    type="button"
+                  <Button
+                    variant="secondary"
                     onClick={() => {
                       soundEngine.playClear();
                       setZenCounter((n) => n + 1);
                     }}
-                    className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-medium border border-[var(--border-subtle)] text-[var(--ink)] hover:border-[var(--border-strong)] transition-colors cursor-pointer"
                   >
                     <Shuffle className="w-4 h-4" />
                     <span>Another Zen loom</span>
-                  </button>
+                  </Button>
                 )}
 
-                <Link
-                  href="/"
-                  className="px-3.5 py-2.5 rounded-xl text-sm font-medium text-[var(--ink-muted)] hover:text-[var(--ink)] transition-colors"
-                >
-                  Back to Hub
+                <Link href="/">
+                  <Button variant="ghost">Back to Hub</Button>
                 </Link>
               </div>
             </motion.section>
@@ -786,19 +864,19 @@ export function LoomAndLatchGame() {
         {!solved && (
           <section
             aria-label="Available tiles"
-            className="mt-6 w-full rounded-3xl border border-[var(--border-subtle)] bg-[var(--surface)]/80 p-4 sm:p-5"
+            className="mt-6 w-full tonal-card p-4 sm:p-5"
           >
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-xs font-medium uppercase tracking-wider text-[var(--ink-muted)]">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-[var(--sys-color-text-muted)]">
                 Tile tray
               </h2>
-              <span className="text-xs text-[var(--ink-muted)]">
+              <span className="text-xs text-[var(--sys-color-text-muted)]">
                 Tap a selected tile to rotate · click placed tiles to lift
               </span>
             </div>
 
             {unplacedPieces.length === 0 ? (
-              <p className="text-sm text-center text-[var(--ink-muted)] py-4">
+              <p className="text-sm text-center text-[var(--sys-color-text-muted)] py-4">
                 All tiles placed.
               </p>
             ) : (
@@ -819,10 +897,10 @@ export function LoomAndLatchGame() {
                       aria-label={`${piece.colour.name} tile${
                         piece.eyeletIndex !== null ? " with latch eyelet" : ""
                       }${isSelected ? ", selected. Press again to rotate" : ""}`}
-                      className={`p-3 rounded-2xl border transition-all flex items-center justify-center min-w-[84px] min-h-[84px] cursor-pointer ${
+                      className={`p-3 rounded-2xl border transition-all flex items-center justify-center min-w-[84px] min-h-[84px] cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sys-color-border-focus)] ${
                         isSelected
-                          ? "bg-[var(--surface-elevated)] border-[var(--accent-emerald)] ring-2 ring-[var(--accent-emerald)]/30 shadow-sm"
-                          : "bg-[var(--board-well)]/60 border-[var(--border-subtle)] hover:border-[var(--border-strong)]"
+                          ? "bg-[var(--sys-color-bg-action-primary-subtle)] border-[var(--sys-color-border-focus)] ring-2 ring-[var(--sys-color-border-focus)]/30"
+                          : "bg-[var(--sys-color-surface-low)] border-[var(--sys-color-border-subtle)] hover:bg-[var(--sys-color-surface-high)]"
                       }`}
                     >
                       <MiniPiecePreview piece={piece} rotation={rot} />
@@ -834,6 +912,8 @@ export function LoomAndLatchGame() {
           </section>
         )}
       </main>
+
+      <ToastStack toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
 }

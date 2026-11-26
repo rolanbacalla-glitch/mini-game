@@ -20,7 +20,7 @@ export const GAMES: GameMeta[] = [
     status: "live",
     statusLabel: "Play today's ritual",
     restorativeBenefit: "Order from chaos — spatial closure with zero verbal strain.",
-    accentColour: "#2ca884",
+    accentColour: "var(--tile-emerald-fill)",
   },
   {
     id: "daily-pour",
@@ -31,7 +31,7 @@ export const GAMES: GameMeta[] = [
     status: "coming-soon",
     statusLabel: "Up next",
     restorativeBenefit: "Rhythmic motor focus with soothing procedural kettle audio.",
-    accentColour: "#d97b59",
+    accentColour: "var(--tile-terracotta-fill)",
   },
   {
     id: "chroma-calm",
@@ -42,7 +42,7 @@ export const GAMES: GameMeta[] = [
     status: "coming-soon",
     statusLabel: "In the workshop",
     restorativeBenefit: "Gentle left-to-right brain switch into pure visual perception.",
-    accentColour: "#a799f6",
+    accentColour: "var(--tile-lavender-fill)",
   },
 ];
 

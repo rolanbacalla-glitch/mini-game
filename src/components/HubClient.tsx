@@ -12,6 +12,13 @@ import {
 } from "lucide-react";
 import { TopBar } from "@/components/TopBar";
 import {
+  Accordion,
+  Alert,
+  Badge,
+  Button,
+  ProgressBar,
+} from "@/components/ui";
+import {
   formatBritishDate,
   GAMES,
   getTodayKey,
@@ -24,25 +31,47 @@ import {
 } from "@/lib/storage";
 
 function LoomPreviewGraphic() {
+  const tokens = [
+    "var(--tile-emerald-fill)",
+    "var(--tile-emerald-fill)",
+    "var(--tile-lavender-fill)",
+    "var(--tile-lavender-fill)",
+    "var(--tile-lavender-fill)",
+    "var(--tile-emerald-fill)",
+    "var(--tile-ochre-fill)",
+    "var(--tile-ochre-fill)",
+    "var(--tile-lavender-fill)",
+    "var(--tile-terracotta-fill)",
+    "var(--tile-emerald-fill)",
+    "var(--tile-ochre-fill)",
+    "var(--tile-slate-fill)",
+    "var(--tile-terracotta-fill)",
+    "var(--tile-terracotta-fill)",
+    "var(--tile-slate-fill)",
+    "var(--tile-ochre-fill)",
+    "var(--tile-slate-fill)",
+    "var(--tile-slate-fill)",
+    "var(--tile-terracotta-fill)",
+    "var(--tile-slate-fill)",
+    "var(--tile-rose-fill)",
+    "var(--tile-rose-fill)",
+    "var(--tile-rose-fill)",
+    "var(--tile-rose-fill)",
+  ];
+
   return (
-    <div className="w-full h-36 rounded-2xl bg-[var(--board-well)] border border-[var(--border-subtle)] p-3 flex items-center justify-center">
+    <div className="w-full h-36 rounded-xl bg-[var(--sys-color-surface-low)] border border-[var(--sys-color-border-subtle)] p-3 flex items-center justify-center">
       <div className="grid grid-cols-5 gap-1 w-28 h-28">
-        {[
-          "#2ca884", "#2ca884", "#9d8ff2", "#9d8ff2", "#9d8ff2",
-          "#2ca884", "#d9a54c", "#d9a54c", "#9d8ff2", "#d97b59",
-          "#2ca884", "#d9a54c", "#5b86b5", "#d97b59", "#d97b59",
-          "#5b86b5", "#d9a54c", "#5b86b5", "#5b86b5", "#d97b59",
-          "#5b86b5", "#c97b96", "#c97b96", "#c97b96", "#c97b96",
-        ].map((colour, idx) => {
+        {tokens.map((colour, idx) => {
           const isPeg = idx === 1 || idx === 12 || idx === 23;
           return (
             <div
               key={idx}
               style={{ backgroundColor: colour }}
-              className="rounded-[4px] relative flex items-center justify-center shadow-xs"
+              className="rounded-[4px] relative flex items-center justify-center"
             >
               {isPeg && (
-                <span className="w-2 h-2 rounded-full bg-white/90 ring-1 ring-black/15" />
+                <span className="w-2 h-2 rounded-full bg-[var(--sys-color-surface-lowest)] ring-1 ring-[var(--sys-color-border-default)]" />
               )}
             </div>
           );
@@ -54,10 +83,19 @@ function LoomPreviewGraphic() {
 
 function DailyPourPreviewGraphic() {
   return (
-    <div className="w-full h-36 rounded-2xl bg-[var(--board-well)] border border-[var(--border-subtle)] p-3 flex items-center justify-center opacity-80">
-      <div className="relative w-24 h-24 rounded-full border-2 border-dashed border-[#d97b59]/50 flex items-center justify-center">
-        <div className="w-16 h-16 rounded-full border-2 border-[#d97b59]/70 flex items-center justify-center">
-          <div className="w-8 h-8 rounded-full bg-[#d97b59]/30" />
+    <div className="w-full h-36 rounded-xl bg-[var(--sys-color-surface-low)] border border-[var(--sys-color-border-subtle)] p-3 flex items-center justify-center opacity-80">
+      <div
+        className="relative w-24 h-24 rounded-full border-2 border-dashed flex items-center justify-center"
+        style={{ borderColor: "var(--tile-terracotta-fill)" }}
+      >
+        <div
+          className="w-16 h-16 rounded-full border-2 flex items-center justify-center"
+          style={{ borderColor: "var(--tile-terracotta-fill)" }}
+        >
+          <div
+            className="w-8 h-8 rounded-full opacity-40"
+            style={{ backgroundColor: "var(--tile-terracotta-fill)" }}
+          />
         </div>
       </div>
     </div>
@@ -65,16 +103,26 @@ function DailyPourPreviewGraphic() {
 }
 
 function ChromaCalmPreviewGraphic() {
+  const swatches = [
+    "var(--tile-emerald-fill)",
+    "var(--tile-teal-fill)",
+    "var(--tile-slate-fill)",
+    "var(--tile-lavender-fill)",
+    "var(--tile-rose-fill)",
+    "var(--tile-ochre-fill)",
+    "var(--tile-terracotta-fill)",
+    "var(--tile-rose-fill)",
+    "var(--tile-lavender-fill)",
+    "var(--tile-slate-fill)",
+  ];
+
   return (
-    <div className="w-full h-36 rounded-2xl bg-[var(--board-well)] border border-[var(--border-subtle)] p-4 flex items-center justify-center opacity-80">
-      <div className="grid grid-cols-5 gap-1.5 w-full max-w-[160px]">
-        {[
-          "#2ca884", "#4eb598", "#77c2b0", "#a1cde0", "#c8bfff",
-          "#3c9a8d", "#63a9a0", "#89b7b9", "#b0c3db", "#b8aef5",
-        ].map((hex, i) => (
+    <div className="w-full h-36 rounded-xl bg-[var(--sys-color-surface-low)] border border-[var(--sys-color-border-subtle)] p-4 flex items-center justify-center opacity-80">
+      <div className="grid grid-cols-5 gap-1.5 w-full max-w-[164px]">
+        {swatches.map((bg, i) => (
           <div
             key={i}
-            style={{ backgroundColor: hex }}
+            style={{ backgroundColor: bg }}
             className="h-9 rounded-lg"
           />
         ))}
@@ -102,43 +150,60 @@ export function HubClient() {
   }, []);
 
   const todayRecord = todayKey && stats ? stats.history[todayKey] : undefined;
+  const dailyProgressValue = todayRecord ? 1 : 0;
 
   return (
     <div className="min-h-screen flex flex-col">
       <TopBar />
 
-      <main className="flex-1 w-full max-w-5xl mx-auto px-4 sm:px-6 pt-6 pb-16">
+      <main className="flex-1 w-full max-w-5xl mx-auto px-4 sm:px-6 pt-8 pb-16">
         {/* Hero */}
         <motion.section
-          initial={{ opacity: 0, y: 12 }}
+          initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.45, ease: "easeOut" }}
-          className="mb-10 sm:mb-12"
+          transition={{ duration: 0.35, ease: "easeOut" }}
+          className="mb-10"
         >
-          <div className="flex flex-wrap items-center gap-2.5 mb-4">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-[var(--surface)] border border-[var(--border-subtle)] text-[var(--ink-muted)]">
-              <Clock className="w-3.5 h-3.5 text-[var(--accent-emerald)]" />
-              {todayLabel || "Today's Ritual"}
-            </span>
+          <div className="flex flex-wrap items-center gap-2 mb-4">
+            <Badge tone="neutral">
+              <Clock className="w-3.5 h-3.5 text-[var(--sys-color-action-primary)]" />
+              <span>{todayLabel || "Today's Ritual"}</span>
+            </Badge>
 
             {stats && stats.currentStreak > 0 && (
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-[var(--accent-emerald-soft)] text-[var(--accent-emerald)]">
+              <Badge tone="success">
                 <Flame className="w-3.5 h-3.5" />
-                {stats.currentStreak}-day streak
-              </span>
+                <span className="font-mono tabular-nums">
+                  {stats.currentStreak}-day streak
+                </span>
+              </Badge>
             )}
+
+            <Badge tone="accent">Antigravity v3.0</Badge>
           </div>
 
-          <h1 className="font-[family-name:var(--font-plus-jakarta)] text-3xl sm:text-4xl font-semibold tracking-tight text-[var(--ink)] max-w-2xl leading-tight">
+          <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight text-[var(--sys-color-text-primary)] max-w-2xl leading-tight">
             Step away for three restorative minutes.
           </h1>
-          <p className="mt-3 text-base sm:text-lg text-[var(--ink-muted)] max-w-2xl leading-relaxed">
+          <p className="mt-3 text-base sm:text-lg text-[var(--sys-color-text-secondary)] max-w-2xl leading-relaxed">
             Small, tactile browser rituals designed to clear mental noise between
             tasks — zero accounts, no punishing timers, and a clean stopping point.
           </p>
+
+          <div className="mt-6 max-w-md">
+            <ProgressBar
+              value={dailyProgressValue}
+              max={1}
+              label={
+                todayRecord
+                  ? "Today's daily ritual complete"
+                  : "Today's daily ritual progress"
+              }
+            />
+          </div>
         </motion.section>
 
-        {/* Game Shelf */}
+        {/* Game Shelf — Solid 5-Step Tonal Cards */}
         <section aria-label="Available coffee-break games">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
             {GAMES.map((game: GameMeta, index: number) => {
@@ -149,73 +214,69 @@ export function HubClient() {
               return (
                 <motion.article
                   key={game.id}
-                  initial={{ opacity: 0, y: 14 }}
+                  initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{
-                    duration: 0.4,
-                    delay: 0.08 * index,
+                    duration: 0.35,
+                    delay: 0.06 * index,
                     ease: "easeOut",
                   }}
-                  className={`rounded-3xl border p-5 flex flex-col justify-between transition-all ${
+                  className={`tonal-card p-5 flex flex-col justify-between ${
                     isLive
-                      ? "bg-[var(--surface)] border-[var(--border-subtle)] shadow-[var(--shadow-card)] hover:border-[var(--accent-emerald)]/50"
-                      : "bg-[var(--surface)]/65 border-[var(--border-subtle)]/80"
+                      ? "hover:border-[var(--sys-color-border-focus)]"
+                      : "opacity-80"
                   }`}
                 >
                   <div>
                     <GamePreview id={game.id} />
 
                     <div className="mt-5 flex items-center justify-between gap-2">
-                      <span className="text-xs font-medium text-[var(--ink-muted)]">
+                      <span className="font-mono text-xs tabular-nums text-[var(--sys-color-text-muted)]">
                         {game.duration}
                       </span>
 
                       {isSolvedToday ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-[var(--accent-emerald-soft)] text-[var(--accent-emerald)]">
+                        <Badge tone="success">
                           <CheckCircle2 className="w-3.5 h-3.5" />
-                          Done ({formatDuration(todayRecord!.elapsedSeconds)})
-                        </span>
+                          <span className="font-mono tabular-nums">
+                            {formatDuration(todayRecord!.elapsedSeconds)}
+                          </span>
+                        </Badge>
                       ) : isLive ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-[var(--accent-emerald-soft)] text-[var(--accent-emerald)]">
+                        <Badge tone="accent">
                           <Sparkles className="w-3 h-3" />
-                          Daily ready
-                        </span>
+                          <span>Daily ready</span>
+                        </Badge>
                       ) : (
-                        <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-[var(--bg-canvas)] text-[var(--ink-muted)]">
-                          {game.statusLabel}
-                        </span>
+                        <Badge tone="neutral">{game.statusLabel}</Badge>
                       )}
                     </div>
 
-                    <h2 className="mt-2 font-[family-name:var(--font-plus-jakarta)] text-xl font-semibold text-[var(--ink)]">
+                    <h2 className="mt-2.5 text-xl font-semibold tracking-tight text-[var(--sys-color-text-primary)]">
                       {game.title}
                     </h2>
-                    <p className="mt-1.5 text-sm text-[var(--ink-muted)] leading-relaxed">
+                    <p className="mt-1.5 text-sm text-[var(--sys-color-text-secondary)] leading-relaxed">
                       {game.subtitle}
                     </p>
                   </div>
 
-                  <div className="mt-6 pt-4 border-t border-[var(--border-subtle)]">
+                  <div className="mt-6 pt-4 border-t border-[var(--sys-color-border-subtle)]">
                     {isLive ? (
                       <div className="flex items-center gap-2">
-                        <Link
-                          href={game.slug}
-                          className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium bg-[var(--ink)] text-[var(--bg-paper)] hover:opacity-90 transition-opacity"
-                        >
-                          <span>
-                            {isSolvedToday ? "Revisit daily" : "Play daily"}
-                          </span>
-                          <ArrowRight className="w-4 h-4" />
+                        <Link href={game.slug} className="flex-1">
+                          <Button variant="primary" className="w-full">
+                            <span>
+                              {isSolvedToday ? "Revisit daily" : "Play daily"}
+                            </span>
+                            <ArrowRight className="w-4 h-4" />
+                          </Button>
                         </Link>
-                        <Link
-                          href={`${game.slug}?mode=zen`}
-                          className="px-3.5 py-2.5 rounded-xl text-sm font-medium border border-[var(--border-subtle)] text-[var(--ink-muted)] hover:text-[var(--ink)] hover:border-[var(--border-strong)] transition-colors"
-                        >
-                          Zen
+                        <Link href={`${game.slug}?mode=zen`}>
+                          <Button variant="secondary">Zen</Button>
                         </Link>
                       </div>
                     ) : (
-                      <p className="text-xs text-[var(--ink-muted)] leading-relaxed">
+                      <p className="text-xs text-[var(--sys-color-text-muted)] leading-relaxed">
                         {game.restorativeBenefit}
                       </p>
                     )}
@@ -226,21 +287,39 @@ export function HubClient() {
           </div>
         </section>
 
-        {/* Restorative Contract Note */}
-        <section className="mt-12 rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface)]/70 px-5 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <p className="text-sm text-[var(--ink-muted)] leading-relaxed">
-            <strong className="font-medium text-[var(--ink)]">
-              The one-round contract:
-            </strong>{" "}
-            Every daily puzzle is seeded locally from today&apos;s date, takes
-            two to three minutes, and ends cleanly so you can return to work
-            refreshed.
-          </p>
-          {stats && stats.totalDailySolved + stats.totalZenSolved > 0 && (
-            <span className="shrink-0 text-xs font-medium text-[var(--ink-muted)]">
-              {stats.totalDailySolved} daily · {stats.totalZenSolved} zen solved
-            </span>
-          )}
+        {/* Restorative Contract Alert & Expandable Philosophy */}
+        <section className="mt-10 space-y-4">
+          <Alert tone="info" title="The one-round contract">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <p className="text-[var(--sys-color-text-secondary)]">
+                Every daily puzzle is seeded locally from today&apos;s date, takes
+                two to three minutes, and ends cleanly so you can return to work
+                refreshed.
+              </p>
+              {stats && stats.totalDailySolved + stats.totalZenSolved > 0 && (
+                <Badge tone="neutral" className="shrink-0 font-mono tabular-nums">
+                  {stats.totalDailySolved} daily · {stats.totalZenSolved} zen
+                </Badge>
+              )}
+            </div>
+          </Alert>
+
+          <Accordion
+            items={[
+              {
+                id: "restorative-design",
+                title: "Why three-minute spatial breaks work",
+                content:
+                  "Grounded in Attention Restoration Theory, light tactile puzzles trigger soft fascination — actively detaching attention from work rumination without taxing executive memory or creating endless scrolling loops.",
+              },
+              {
+                id: "zero-backend",
+                title: "Private by default — zero accounts or tracking",
+                content:
+                  "Your daily seed is computed deterministically in the browser from YYYY-MM-DD, audio is synthesised locally via Web Audio, and streaks are stored purely in your browser's localStorage.",
+              },
+            ]}
+          />
         </section>
       </main>
     </div>
