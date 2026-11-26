@@ -26,8 +26,10 @@ import {
 } from "@/lib/games";
 import {
   formatDuration,
+  loadChromaStats,
   loadLoomStats,
   loadPourStats,
+  type ChromaStats,
   type LoomStats,
   type PourStats,
 } from "@/lib/storage";
@@ -144,6 +146,7 @@ export function HubClient() {
   const [todayKey, setTodayKey] = useState<string>("");
   const [loomStats, setLoomStats] = useState<LoomStats | null>(null);
   const [pourStats, setPourStats] = useState<PourStats | null>(null);
+  const [chromaStats, setChromaStats] = useState<ChromaStats | null>(null);
 
   useEffect(() => {
     const now = new Date();
@@ -151,20 +154,29 @@ export function HubClient() {
     setTodayKey(getTodayKey(now));
     setLoomStats(loadLoomStats());
     setPourStats(loadPourStats());
+    setChromaStats(loadChromaStats());
   }, []);
 
   const todayLoom = todayKey && loomStats ? loomStats.history[todayKey] : undefined;
   const todayPour = todayKey && pourStats ? pourStats.history[todayKey] : undefined;
+  const todayChroma =
+    todayKey && chromaStats ? chromaStats.history[todayKey] : undefined;
   const liveGamesCount = GAMES.filter((g) => g.status === "live").length;
-  const completedTodayCount = (todayLoom ? 1 : 0) + (todayPour ? 1 : 0);
+  const completedTodayCount =
+    (todayLoom ? 1 : 0) + (todayPour ? 1 : 0) + (todayChroma ? 1 : 0);
   const topStreak = Math.max(
     loomStats?.currentStreak ?? 0,
-    pourStats?.currentStreak ?? 0
+    pourStats?.currentStreak ?? 0,
+    chromaStats?.currentStreak ?? 0
   );
   const totalDaily =
-    (loomStats?.totalDailySolved ?? 0) + (pourStats?.totalDailyBrewed ?? 0);
+    (loomStats?.totalDailySolved ?? 0) +
+    (pourStats?.totalDailyBrewed ?? 0) +
+    (chromaStats?.totalDailySolved ?? 0);
   const totalZen =
-    (loomStats?.totalZenSolved ?? 0) + (pourStats?.totalZenBrewed ?? 0);
+    (loomStats?.totalZenSolved ?? 0) +
+    (pourStats?.totalZenBrewed ?? 0) +
+    (chromaStats?.totalZenSolved ?? 0);
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -227,7 +239,9 @@ export function HubClient() {
                   ? formatDuration(todayLoom.elapsedSeconds)
                   : game.id === "daily-pour" && todayPour
                     ? `${todayPour.extractionPct}%`
-                    : null;
+                    : game.id === "chroma-calm" && todayChroma
+                      ? `${todayChroma.swaps} swaps`
+                      : null;
               const isSolvedToday = Boolean(solvedBadgeText);
 
               return (
