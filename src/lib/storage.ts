@@ -125,3 +125,109 @@ export function formatDuration(seconds: number): string {
   if (mins === 0) return `${secs}s`;
   return `${mins}m ${String(secs).padStart(2, "0")}s`;
 }
+
+/* ---------- Daily Pour Persistence ---------- */
+export interface PourCompletionRecord {
+  dateKey: string;
+  beanName: string;
+  extractionPct: number;
+  elapsedSeconds: number;
+  shareText: string;
+  completedAt: string;
+}
+
+export interface PourStats {
+  currentStreak: number;
+  bestStreak: number;
+  totalDailyBrewed: number;
+  totalZenBrewed: number;
+  lastCompletedDate: string | null;
+  history: Record<string, PourCompletionRecord>;
+}
+
+const POUR_STATS_KEY = "coffee-break:daily-pour:stats:v1";
+
+const DEFAULT_POUR_STATS: PourStats = {
+  currentStreak: 0,
+  bestStreak: 0,
+  totalDailyBrewed: 0,
+  totalZenBrewed: 0,
+  lastCompletedDate: null,
+  history: {},
+};
+
+export function loadPourStats(): PourStats {
+  if (typeof window === "undefined") return DEFAULT_POUR_STATS;
+  try {
+    const raw = window.localStorage.getItem(POUR_STATS_KEY);
+    if (!raw) return DEFAULT_POUR_STATS;
+    const parsed = JSON.parse(raw) as Partial<PourStats>;
+    return {
+      ...DEFAULT_POUR_STATS,
+      ...parsed,
+      history: parsed.history ?? {},
+    };
+  } catch {
+    return DEFAULT_POUR_STATS;
+  }
+}
+
+export function recordPourDailyCompletion(
+  record: PourCompletionRecord
+): PourStats {
+  const stats = loadPourStats();
+  const alreadySolved = Boolean(stats.history[record.dateKey]);
+  const updatedHistory = {
+    ...stats.history,
+    [record.dateKey]: record,
+  };
+
+  let currentStreak = stats.currentStreak;
+  let totalDailyBrewed = stats.totalDailyBrewed;
+
+  if (!alreadySolved) {
+    totalDailyBrewed += 1;
+    const yesterday = getPreviousDateKey(record.dateKey);
+    if (stats.lastCompletedDate === yesterday) {
+      currentStreak = stats.currentStreak + 1;
+    } else if (stats.lastCompletedDate === record.dateKey) {
+      currentStreak = Math.max(1, stats.currentStreak);
+    } else {
+      currentStreak = 1;
+    }
+  }
+
+  const nextStats: PourStats = {
+    ...stats,
+    currentStreak,
+    bestStreak: Math.max(stats.bestStreak, currentStreak),
+    totalDailyBrewed,
+    lastCompletedDate: record.dateKey,
+    history: updatedHistory,
+  };
+
+  if (typeof window !== "undefined") {
+    try {
+      window.localStorage.setItem(POUR_STATS_KEY, JSON.stringify(nextStats));
+    } catch {
+      // Ignore storage quota errors
+    }
+  }
+  return nextStats;
+}
+
+export function recordPourZenCompletion(): PourStats {
+  const stats = loadPourStats();
+  const nextStats: PourStats = {
+    ...stats,
+    totalZenBrewed: stats.totalZenBrewed + 1,
+  };
+  if (typeof window !== "undefined") {
+    try {
+      window.localStorage.setItem(POUR_STATS_KEY, JSON.stringify(nextStats));
+    } catch {
+      // Ignore storage quota errors
+    }
+  }
+  return nextStats;
+}

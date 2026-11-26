@@ -27,7 +27,9 @@ import {
 import {
   formatDuration,
   loadLoomStats,
+  loadPourStats,
   type LoomStats,
+  type PourStats,
 } from "@/lib/storage";
 
 function LoomPreviewGraphic() {
@@ -140,17 +142,29 @@ function GamePreview({ id }: { id: string }) {
 export function HubClient() {
   const [todayLabel, setTodayLabel] = useState<string>("");
   const [todayKey, setTodayKey] = useState<string>("");
-  const [stats, setStats] = useState<LoomStats | null>(null);
+  const [loomStats, setLoomStats] = useState<LoomStats | null>(null);
+  const [pourStats, setPourStats] = useState<PourStats | null>(null);
 
   useEffect(() => {
     const now = new Date();
     setTodayLabel(formatBritishDate(now));
     setTodayKey(getTodayKey(now));
-    setStats(loadLoomStats());
+    setLoomStats(loadLoomStats());
+    setPourStats(loadPourStats());
   }, []);
 
-  const todayRecord = todayKey && stats ? stats.history[todayKey] : undefined;
-  const dailyProgressValue = todayRecord ? 1 : 0;
+  const todayLoom = todayKey && loomStats ? loomStats.history[todayKey] : undefined;
+  const todayPour = todayKey && pourStats ? pourStats.history[todayKey] : undefined;
+  const liveGamesCount = GAMES.filter((g) => g.status === "live").length;
+  const completedTodayCount = (todayLoom ? 1 : 0) + (todayPour ? 1 : 0);
+  const topStreak = Math.max(
+    loomStats?.currentStreak ?? 0,
+    pourStats?.currentStreak ?? 0
+  );
+  const totalDaily =
+    (loomStats?.totalDailySolved ?? 0) + (pourStats?.totalDailyBrewed ?? 0);
+  const totalZen =
+    (loomStats?.totalZenSolved ?? 0) + (pourStats?.totalZenBrewed ?? 0);
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -170,11 +184,11 @@ export function HubClient() {
               <span>{todayLabel || "Today's Ritual"}</span>
             </Badge>
 
-            {stats && stats.currentStreak > 0 && (
+            {topStreak > 0 && (
               <Badge tone="success">
                 <Flame className="w-3.5 h-3.5" />
                 <span className="font-mono tabular-nums">
-                  {stats.currentStreak}-day streak
+                  {topStreak}-day streak
                 </span>
               </Badge>
             )}
@@ -192,12 +206,12 @@ export function HubClient() {
 
           <div className="mt-6 max-w-md">
             <ProgressBar
-              value={dailyProgressValue}
-              max={1}
+              value={completedTodayCount}
+              max={liveGamesCount}
               label={
-                todayRecord
-                  ? "Today's daily ritual complete"
-                  : "Today's daily ritual progress"
+                completedTodayCount >= liveGamesCount
+                  ? "All daily rituals complete"
+                  : `Today's daily rituals (${completedTodayCount} of ${liveGamesCount})`
               }
             />
           </div>
@@ -208,8 +222,13 @@ export function HubClient() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
             {GAMES.map((game: GameMeta, index: number) => {
               const isLive = game.status === "live";
-              const isSolvedToday =
-                game.id === "loom-and-latch" && Boolean(todayRecord);
+              const solvedBadgeText =
+                game.id === "loom-and-latch" && todayLoom
+                  ? formatDuration(todayLoom.elapsedSeconds)
+                  : game.id === "daily-pour" && todayPour
+                    ? `${todayPour.extractionPct}%`
+                    : null;
+              const isSolvedToday = Boolean(solvedBadgeText);
 
               return (
                 <motion.article
@@ -239,7 +258,7 @@ export function HubClient() {
                         <Badge tone="success">
                           <CheckCircle2 className="w-3.5 h-3.5" />
                           <span className="font-mono tabular-nums">
-                            {formatDuration(todayRecord!.elapsedSeconds)}
+                            {solvedBadgeText}
                           </span>
                         </Badge>
                       ) : isLive ? (
@@ -296,9 +315,9 @@ export function HubClient() {
                 two to three minutes, and ends cleanly so you can return to work
                 refreshed.
               </p>
-              {stats && stats.totalDailySolved + stats.totalZenSolved > 0 && (
+              {totalDaily + totalZen > 0 && (
                 <Badge tone="neutral" className="shrink-0 font-mono tabular-nums">
-                  {stats.totalDailySolved} daily · {stats.totalZenSolved} zen
+                  {totalDaily} daily · {totalZen} zen
                 </Badge>
               )}
             </div>

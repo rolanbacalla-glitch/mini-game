@@ -6,6 +6,11 @@ class SoundEngine {
   private ctx: AudioContext | null = null;
   private muted: boolean = false;
   private initialised: boolean = false;
+  private pourNodes: {
+    source: AudioBufferSourceNode;
+    filter: BiquadFilterNode;
+    gain: GainNode;
+  } | null = null;
 
   private ensureContext(): AudioContext | null {
     if (typeof window === "undefined") return null;
@@ -42,9 +47,111 @@ class SoundEngine {
   public setMuted(muted: boolean): void {
     this.muted = muted;
     this.initialised = true;
+    if (muted) {
+      this.stopPourSound();
+    }
     if (typeof window !== "undefined") {
       window.localStorage.setItem(MUTE_STORAGE_KEY, String(muted));
     }
+  }
+
+  /** Soft tactile coffee-grinder burr crunch */
+  public playGrindTick(): void {
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+
+    const bufferSize = Math.floor(ctx.sampleRate * 0.045);
+    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (bufferSize * 0.35));
+    }
+
+    const noise = ctx.createBufferSource();
+    noise.buffer = buffer;
+
+    const filter = ctx.createBiquadFilter();
+    filter.type = "bandpass";
+    filter.frequency.setValueAtTime(680 + Math.random() * 240, now);
+    filter.Q.setValueAtTime(1.6, now);
+
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.001, now);
+    gain.gain.linearRampToValueAtTime(0.09, now + 0.008);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.045);
+
+    noise.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+    noise.start(now);
+    noise.stop(now + 0.048);
+  }
+
+  /** Start soothing filtered pink-noise kettle water pour */
+  public startPourSound(pitchRatio: number = 0.5): void {
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+
+    if (this.pourNodes) {
+      const targetFreq = 650 + Math.min(1, Math.max(0, pitchRatio)) * 620;
+      this.pourNodes.filter.frequency.setTargetAtTime(
+        targetFreq,
+        ctx.currentTime,
+        0.12
+      );
+      return;
+    }
+
+    const bufferSize = ctx.sampleRate * 2;
+    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const output = buffer.getChannelData(0);
+    let b0 = 0;
+    let b1 = 0;
+    let b2 = 0;
+    for (let i = 0; i < bufferSize; i++) {
+      const white = Math.random() * 2 - 1;
+      b0 = 0.99765 * b0 + white * 0.099046;
+      b1 = 0.963 * b1 + white * 0.2965164;
+      b2 = 0.57 * b2 + white * 1.0526913;
+      output[i] = (b0 + b1 + b2 + white * 0.1848) * 0.12;
+    }
+
+    const source = ctx.createBufferSource();
+    source.buffer = buffer;
+    source.loop = true;
+
+    const filter = ctx.createBiquadFilter();
+    filter.type = "bandpass";
+    filter.frequency.setValueAtTime(650 + pitchRatio * 620, ctx.currentTime);
+    filter.Q.setValueAtTime(1.1, ctx.currentTime);
+
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.001, ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(0.11, ctx.currentTime + 0.18);
+
+    source.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+    source.start();
+
+    this.pourNodes = { source, filter, gain };
+  }
+
+  /** Gently fade out pouring water sound */
+  public stopPourSound(): void {
+    if (!this.pourNodes || !this.ctx) return;
+    const { source, gain } = this.pourNodes;
+    const now = this.ctx.currentTime;
+    try {
+      gain.gain.cancelScheduledValues(now);
+      gain.gain.setValueAtTime(Math.max(0.001, gain.gain.value), now);
+      gain.gain.exponentialRampToValueAtTime(0.0008, now + 0.14);
+      source.stop(now + 0.16);
+    } catch {
+      // Ignore if already stopped
+    }
+    this.pourNodes = null;
   }
 
   /** Soft linen pickup thump */
