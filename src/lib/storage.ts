@@ -1,0 +1,127 @@
+"use client";
+
+export interface DailyCompletionRecord {
+  dateKey: string;
+  elapsedSeconds: number;
+  moves: number;
+  usedHint: boolean;
+  shareText: string;
+  completedAt: string;
+}
+
+export interface LoomStats {
+  currentStreak: number;
+  bestStreak: number;
+  totalDailySolved: number;
+  totalZenSolved: number;
+  lastCompletedDate: string | null;
+  history: Record<string, DailyCompletionRecord>;
+}
+
+const STATS_KEY = "coffee-break:loom-and-latch:stats:v1";
+
+const DEFAULT_STATS: LoomStats = {
+  currentStreak: 0,
+  bestStreak: 0,
+  totalDailySolved: 0,
+  totalZenSolved: 0,
+  lastCompletedDate: null,
+  history: {},
+};
+
+export function loadLoomStats(): LoomStats {
+  if (typeof window === "undefined") return DEFAULT_STATS;
+  try {
+    const raw = window.localStorage.getItem(STATS_KEY);
+    if (!raw) return DEFAULT_STATS;
+    const parsed = JSON.parse(raw) as Partial<LoomStats>;
+    return {
+      ...DEFAULT_STATS,
+      ...parsed,
+      history: parsed.history ?? {},
+    };
+  } catch {
+    return DEFAULT_STATS;
+  }
+}
+
+function getPreviousDateKey(dateKey: string): string {
+  const [y, m, d] = dateKey.split("-").map(Number);
+  const dt = new Date(y, (m || 1) - 1, d || 1);
+  dt.setDate(dt.getDate() - 1);
+  const yy = dt.getFullYear();
+  const mm = String(dt.getMonth() + 1).padStart(2, "0");
+  const dd = String(dt.getDate()).padStart(2, "0");
+  return `${yy}-${mm}-${dd}`;
+}
+
+export function recordDailyCompletion(
+  record: DailyCompletionRecord
+): LoomStats {
+  const stats = loadLoomStats();
+  const alreadySolved = Boolean(stats.history[record.dateKey]);
+
+  const updatedHistory = {
+    ...stats.history,
+    [record.dateKey]: record,
+  };
+
+  let currentStreak = stats.currentStreak;
+  let totalDailySolved = stats.totalDailySolved;
+
+  if (!alreadySolved) {
+    totalDailySolved += 1;
+    const yesterday = getPreviousDateKey(record.dateKey);
+    if (stats.lastCompletedDate === yesterday) {
+      currentStreak = stats.currentStreak + 1;
+    } else if (stats.lastCompletedDate === record.dateKey) {
+      currentStreak = Math.max(1, stats.currentStreak);
+    } else {
+      currentStreak = 1;
+    }
+  }
+
+  const nextStats: LoomStats = {
+    ...stats,
+    currentStreak,
+    bestStreak: Math.max(stats.bestStreak, currentStreak),
+    totalDailySolved,
+    lastCompletedDate: record.dateKey,
+    history: updatedHistory,
+  };
+
+  if (typeof window !== "undefined") {
+    try {
+      window.localStorage.setItem(STATS_KEY, JSON.stringify(nextStats));
+    } catch {
+      // Ignore storage quota errors gracefully
+    }
+  }
+
+  return nextStats;
+}
+
+export function recordZenCompletion(): LoomStats {
+  const stats = loadLoomStats();
+  const nextStats: LoomStats = {
+    ...stats,
+    totalZenSolved: stats.totalZenSolved + 1,
+  };
+
+  if (typeof window !== "undefined") {
+    try {
+      window.localStorage.setItem(STATS_KEY, JSON.stringify(nextStats));
+    } catch {
+      // Ignore storage quota errors gracefully
+    }
+  }
+
+  return nextStats;
+}
+
+export function formatDuration(seconds: number): string {
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  if (mins === 0) return `${secs}s`;
+  return `${mins}m ${String(secs).padStart(2, "0")}s`;
+}
