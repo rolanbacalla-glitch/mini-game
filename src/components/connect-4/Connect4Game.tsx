@@ -291,7 +291,7 @@ export function Connect4Game() {
   const pair = useMemo(() => getEmblemPairById(emblemPairId), [emblemPairId]);
 
   const [opponentMode, setOpponentMode] = useState<OpponentMode>("bot");
-  const [difficulty, setDifficulty] = useState<Difficulty>("clever");
+  const [difficulty, setDifficulty] = useState<Difficulty>("advanced");
 
   const [board, setBoard] = useState<Board>(() => createEmptyBoard());
   const [currentPlayer, setCurrentPlayer] = useState<Player>(1);
@@ -310,7 +310,7 @@ export function Connect4Game() {
   const recordedMatchRef = useRef<number>(0);
 
   const activeOpponent: OpponentMode = mode === "daily" ? "bot" : opponentMode;
-  const activeDifficulty: Difficulty = mode === "daily" ? "clever" : difficulty;
+  const activeDifficulty: Difficulty = mode === "daily" ? "advanced" : difficulty;
 
   const prefersReducedMotion = Boolean(useReducedMotion());
 
@@ -1258,10 +1258,12 @@ export function Connect4Game() {
                         {result.winner === 2
                           ? "Winner · 4 connected"
                           : botThinking
-                            ? "Thinking…"
-                            : !isFinished && currentPlayer === 2
-                              ? "Active turn · grooved disc"
-                              : "Grooved charcoal disc"}
+                            ? "Calculating…"
+                            : activeOpponent === "bot"
+                              ? `${activeDifficulty[0].toUpperCase()}${activeDifficulty.slice(1)} AI · grooved disc`
+                              : !isFinished && currentPlayer === 2
+                                ? "Active turn · grooved disc"
+                                : "Grooved charcoal disc"}
                       </div>
                     </div>
                   </div>
@@ -1400,7 +1402,7 @@ export function Connect4Game() {
                       Bot skill
                     </h2>
                     <div className="grid grid-cols-3 gap-1.5 p-1 rounded-xl bg-[var(--sys-color-surface-low)] border border-[var(--sys-color-border-subtle)]">
-                      {(["gentle", "clever", "master"] as Difficulty[]).map(
+                      {(["gentle", "clever", "advanced"] as Difficulty[]).map(
                         (lvl) => (
                           <button
                             key={lvl}

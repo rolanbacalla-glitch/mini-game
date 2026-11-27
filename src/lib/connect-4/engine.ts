@@ -5,7 +5,7 @@ export type Player = 1 | 2;
 export type CellValue = 0 | Player;
 export type Board = CellValue[][];
 
-export type Difficulty = "gentle" | "clever" | "master";
+export type Difficulty = "gentle" | "clever" | "advanced";
 export type OpponentMode = "bot" | "local";
 export type EmblemPairId = "cafe" | "critters" | "celestial" | "tactile";
 
@@ -202,28 +202,116 @@ export function checkBoardResult(board: Board): BoardResult {
 }
 
 /* ============================================================================
-   Alpha-Beta Minimax AI (Fast, Centre-Aware, 3 Distinct Difficulties)
+   High-Strength Alpha-Beta Minimax AI
+   - Fast O(1) last-move 4-in-a-row detection
+   - Per-search transposition table with alpha/beta bounds
+   - Positional centrality matrix + threat parity + fork & trap awareness
    ============================================================================ */
 
 const COLUMN_SEARCH_ORDER = [3, 2, 4, 1, 5, 0, 6];
 
-function scoreWindow(window: CellValue[], bot: Player, opp: Player): number {
-  let botCount = 0;
-  let oppCount = 0;
-  let emptyCount = 0;
+// Number of possible 4-in-a-row lines passing through each cell (classic Connect 4 heat map)
+const POSITION_WEIGHTS: number[][] = [
+  [3, 4, 5, 7, 5, 4, 3],
+  [4, 6, 8, 10, 8, 6, 4],
+  [5, 8, 11, 13, 11, 8, 5],
+  [5, 8, 11, 13, 11, 8, 5],
+  [4, 6, 8, 10, 8, 6, 4],
+  [3, 4, 5, 7, 5, 4, 3],
+];
 
-  for (let i = 0; i < 4; i++) {
-    if (window[i] === bot) botCount++;
-    else if (window[i] === opp) oppCount++;
-    else emptyCount++;
+const WIN_SCORE = 1_000_000;
+
+/** Fast O(1) check whether placing `player` at `(row, col)` creates 4+ in a row */
+function isWinningAt(
+  board: Board,
+  row: number,
+  col: number,
+  player: Player
+): boolean {
+  const axes: Array<[number, number]> = [
+    [0, 1],
+    [1, 0],
+    [1, 1],
+    [1, -1],
+  ];
+
+  for (const [dr, dc] of axes) {
+    let count = 1;
+
+    let r = row + dr;
+    let c = col + dc;
+    while (r >= 0 && r < ROWS && c >= 0 && c < COLS && board[r][c] === player) {
+      count++;
+      r += dr;
+      c += dc;
+    }
+
+    r = row - dr;
+    c = col - dc;
+    while (r >= 0 && r < ROWS && c >= 0 && c < COLS && board[r][c] === player) {
+      count++;
+      r -= dr;
+      c -= dc;
+    }
+
+    if (count >= 4) return true;
   }
 
-  if (botCount === 4) return 10000;
-  if (botCount === 3 && emptyCount === 1) return 14;
-  if (botCount === 2 && emptyCount === 2) return 4;
+  return false;
+}
 
-  if (oppCount === 3 && emptyCount === 1) return -18;
-  if (oppCount === 2 && emptyCount === 2) return -3;
+function encodeBoard(board: Board, maximizing: boolean): string {
+  let key = maximizing ? "1:" : "0:";
+  for (let r = 0; r < ROWS; r++) {
+    const row = board[r];
+    key += `${row[0]}${row[1]}${row[2]}${row[3]}${row[4]}${row[5]}${row[6]}`;
+  }
+  return key;
+}
+
+function scoreWindow(
+  a: CellValue,
+  b: CellValue,
+  c: CellValue,
+  d: CellValue,
+  emptyRow: number,
+  bot: Player,
+  opp: Player
+): number {
+  let botCount = 0;
+  let oppCount = 0;
+
+  if (a === bot) botCount++;
+  else if (a === opp) oppCount++;
+  if (b === bot) botCount++;
+  else if (b === opp) oppCount++;
+  if (c === bot) botCount++;
+  else if (c === opp) oppCount++;
+  if (d === bot) botCount++;
+  else if (d === opp) oppCount++;
+
+  if (botCount > 0 && oppCount > 0) return 0;
+
+  if (botCount === 4) return 50_000;
+  if (oppCount === 4) return -50_000;
+
+  // Classic Connect 4 parity bonus: Player 2 benefits from even 0-indexed rows (rows 0, 2, 4 from top)
+  const parityBonus =
+    emptyRow >= 0 && ((bot === 2 && emptyRow % 2 === 0) || (bot === 1 && emptyRow % 2 === 1))
+      ? 10
+      : 0;
+
+  if (botCount === 3) return 42 + parityBonus;
+  if (botCount === 2) return 7;
+
+  const oppParityPenalty =
+    emptyRow >= 0 && ((opp === 2 && emptyRow % 2 === 0) || (opp === 1 && emptyRow % 2 === 1))
+      ? 12
+      : 0;
+
+  if (oppCount === 3) return -(52 + oppParityPenalty);
+  if (oppCount === 2) return -8;
 
   return 0;
 }
@@ -232,70 +320,96 @@ function evaluateBoard(board: Board, bot: Player): number {
   const opp: Player = bot === 1 ? 2 : 1;
   let score = 0;
 
-  // Centre column preference
-  const centerCol = Math.floor(COLS / 2);
-  let centerCount = 0;
+  // 1. Positional heat-map control
   for (let r = 0; r < ROWS; r++) {
-    if (board[r][centerCol] === bot) centerCount++;
-  }
-  score += centerCount * 6;
-
-  // Horizontal windows
-  for (let r = 0; r < ROWS; r++) {
-    for (let c = 0; c <= COLS - 4; c++) {
-      score += scoreWindow(
-        [board[r][c], board[r][c + 1], board[r][c + 2], board[r][c + 3]],
-        bot,
-        opp
-      );
+    for (let c = 0; c < COLS; c++) {
+      const cell = board[r][c];
+      if (cell === bot) score += POSITION_WEIGHTS[r][c] * 2;
+      else if (cell === opp) score -= POSITION_WEIGHTS[r][c] * 2;
     }
   }
 
-  // Vertical windows
+  // 2. Count immediate playable threats (fork awareness)
+  let botImmediateThreats = 0;
+  let oppImmediateThreats = 0;
+  for (let c = 0; c < COLS; c++) {
+    const r = getDropRow(board, c);
+    if (r === -1) continue;
+
+    board[r][c] = bot;
+    if (isWinningAt(board, r, c, bot)) botImmediateThreats++;
+    board[r][c] = opp;
+    if (isWinningAt(board, r, c, opp)) oppImmediateThreats++;
+    board[r][c] = 0;
+  }
+
+  if (botImmediateThreats >= 2) score += 450;
+  else if (botImmediateThreats === 1) score += 36;
+
+  if (oppImmediateThreats >= 2) score -= 520;
+  else if (oppImmediateThreats === 1) score -= 44;
+
+  // 3. Evaluate all 69 four-cell windows
+  // Horizontal
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c <= COLS - 4; c++) {
+      const a = board[r][c];
+      const b = board[r][c + 1];
+      const c3 = board[r][c + 2];
+      const d = board[r][c + 3];
+      const emptyRow = a === 0 || b === 0 || c3 === 0 || d === 0 ? r : -1;
+      score += scoreWindow(a, b, c3, d, emptyRow, bot, opp);
+    }
+  }
+
+  // Vertical
   for (let c = 0; c < COLS; c++) {
     for (let r = 0; r <= ROWS - 4; r++) {
-      score += scoreWindow(
-        [board[r][c], board[r + 1][c], board[r + 2][c], board[r + 3][c]],
-        bot,
-        opp
-      );
+      const a = board[r][c];
+      const b = board[r + 1][c];
+      const c3 = board[r + 2][c];
+      const d = board[r + 3][c];
+      score += scoreWindow(a, b, c3, d, -1, bot, opp);
     }
   }
 
   // Positive slope diagonals
   for (let r = 0; r <= ROWS - 4; r++) {
     for (let c = 0; c <= COLS - 4; c++) {
-      score += scoreWindow(
-        [
-          board[r][c],
-          board[r + 1][c + 1],
-          board[r + 2][c + 2],
-          board[r + 3][c + 3],
-        ],
-        bot,
-        opp
-      );
+      const a = board[r][c];
+      const b = board[r + 1][c + 1];
+      const c3 = board[r + 2][c + 2];
+      const d = board[r + 3][c + 3];
+      const emptyRow =
+        a === 0 ? r : b === 0 ? r + 1 : c3 === 0 ? r + 2 : d === 0 ? r + 3 : -1;
+      score += scoreWindow(a, b, c3, d, emptyRow, bot, opp);
     }
   }
 
   // Negative slope diagonals
   for (let r = 0; r <= ROWS - 4; r++) {
     for (let c = 3; c < COLS; c++) {
-      score += scoreWindow(
-        [
-          board[r][c],
-          board[r + 1][c - 1],
-          board[r + 2][c - 2],
-          board[r + 3][c - 3],
-        ],
-        bot,
-        opp
-      );
+      const a = board[r][c];
+      const b = board[r + 1][c - 1];
+      const c3 = board[r + 2][c - 2];
+      const d = board[r + 3][c - 3];
+      const emptyRow =
+        a === 0 ? r : b === 0 ? r + 1 : c3 === 0 ? r + 2 : d === 0 ? r + 3 : -1;
+      score += scoreWindow(a, b, c3, d, emptyRow, bot, opp);
     }
   }
 
   return score;
 }
+
+interface TTEntry {
+  depth: number;
+  score: number;
+  flag: "exact" | "lower" | "upper";
+  bestCol: number;
+}
+
+const TIME_EXCEEDED = Number.NaN;
 
 function minimax(
   board: Board,
@@ -303,58 +417,131 @@ function minimax(
   alpha: number,
   beta: number,
   maximizing: boolean,
-  bot: Player
-): { col: number; score: number } {
+  bot: Player,
+  tt: Map<string, TTEntry>,
+  deadline: number,
+  nodeCounter: { count: number }
+): number {
+  nodeCounter.count++;
+  if ((nodeCounter.count & 2047) === 0 && performance.now() >= deadline) {
+    return TIME_EXCEEDED;
+  }
+
   const opp: Player = bot === 1 ? 2 : 1;
-  const result = checkBoardResult(board);
 
-  if (result.winner === bot) {
-    return { col: -1, score: 1_000_000 + depth * 100 };
+  // Check if board is full
+  let hasMove = false;
+  for (let i = 0; i < COLS; i++) {
+    if (board[0][i] === 0) {
+      hasMove = true;
+      break;
+    }
   }
-  if (result.winner === opp) {
-    return { col: -1, score: -1_000_000 - depth * 100 };
-  }
-  if (result.winner === "draw") {
-    return { col: -1, score: 0 };
-  }
+  if (!hasMove) return 0;
+
   if (depth === 0) {
-    return { col: -1, score: evaluateBoard(board, bot) };
+    return evaluateBoard(board, bot);
   }
 
-  const validCols = COLUMN_SEARCH_ORDER.filter((c) => board[0][c] === 0);
-  let bestCol = validCols[0];
+  const ttKey = encodeBoard(board, maximizing);
+  const cached = tt.get(ttKey);
+  const origAlpha = alpha;
+  const origBeta = beta;
+
+  if (cached && cached.depth >= depth) {
+    if (cached.flag === "exact") return cached.score;
+    if (cached.flag === "lower") alpha = Math.max(alpha, cached.score);
+    else if (cached.flag === "upper") beta = Math.min(beta, cached.score);
+    if (alpha >= beta) return cached.score;
+  }
+
+  const mover = maximizing ? bot : opp;
+
+  // Immediate win check at this ply before recursing
+  for (const col of COLUMN_SEARCH_ORDER) {
+    const row = getDropRow(board, col);
+    if (row === -1) continue;
+    board[row][col] = mover;
+    const winsNow = isWinningAt(board, row, col, mover);
+    board[row][col] = 0;
+    if (winsNow) {
+      return maximizing ? WIN_SCORE + depth * 100 : -(WIN_SCORE + depth * 100);
+    }
+  }
+
+  // Try transposition-table best move first for massive alpha-beta pruning
+  const orderedCols =
+    cached && cached.bestCol !== -1
+      ? [
+          cached.bestCol,
+          ...COLUMN_SEARCH_ORDER.filter((c) => c !== cached.bestCol),
+        ]
+      : COLUMN_SEARCH_ORDER;
+
+  let bestValue = maximizing ? -Infinity : Infinity;
+  let bestCol = -1;
 
   if (maximizing) {
-    let value = -Infinity;
-    for (const col of validCols) {
+    for (const col of orderedCols) {
       const row = getDropRow(board, col);
+      if (row === -1) continue;
       board[row][col] = bot;
-      const evalScore = minimax(board, depth - 1, alpha, beta, false, bot).score;
+      const evalScore = minimax(
+        board,
+        depth - 1,
+        alpha,
+        beta,
+        false,
+        bot,
+        tt,
+        deadline,
+        nodeCounter
+      );
       board[row][col] = 0;
-      if (evalScore > value) {
-        value = evalScore;
+      if (Number.isNaN(evalScore)) return TIME_EXCEEDED;
+      if (evalScore > bestValue) {
+        bestValue = evalScore;
         bestCol = col;
       }
-      alpha = Math.max(alpha, value);
+      if (bestValue > alpha) alpha = bestValue;
       if (alpha >= beta) break;
     }
-    return { col: bestCol, score: value };
   } else {
-    let value = Infinity;
-    for (const col of validCols) {
+    for (const col of orderedCols) {
       const row = getDropRow(board, col);
+      if (row === -1) continue;
       board[row][col] = opp;
-      const evalScore = minimax(board, depth - 1, alpha, beta, true, bot).score;
+      const evalScore = minimax(
+        board,
+        depth - 1,
+        alpha,
+        beta,
+        true,
+        bot,
+        tt,
+        deadline,
+        nodeCounter
+      );
       board[row][col] = 0;
-      if (evalScore < value) {
-        value = evalScore;
+      if (Number.isNaN(evalScore)) return TIME_EXCEEDED;
+      if (evalScore < bestValue) {
+        bestValue = evalScore;
         bestCol = col;
       }
-      beta = Math.min(beta, value);
+      if (bestValue < beta) beta = bestValue;
       if (alpha >= beta) break;
     }
-    return { col: bestCol, score: value };
   }
+
+  let flag: TTEntry["flag"] = "exact";
+  if (bestValue <= origAlpha) flag = "upper";
+  else if (bestValue >= origBeta) flag = "lower";
+
+  if (tt.size < 80_000) {
+    tt.set(ttKey, { depth, score: bestValue, flag, bestCol });
+  }
+
+  return bestValue;
 }
 
 export function chooseBotColumn(
@@ -374,7 +561,7 @@ export function chooseBotColumn(
   for (const col of validCols) {
     const row = getDropRow(working, col);
     working[row][col] = bot;
-    const win = checkBoardResult(working).winner === bot;
+    const win = isWinningAt(working, row, col, bot);
     working[row][col] = 0;
     if (win) return col;
   }
@@ -383,7 +570,7 @@ export function chooseBotColumn(
   for (const col of validCols) {
     const row = getDropRow(working, col);
     working[row][col] = opp;
-    const oppWins = checkBoardResult(working).winner === opp;
+    const oppWins = isWinningAt(working, row, col, opp);
     working[row][col] = 0;
     if (oppWins) {
       if (difficulty !== "gentle" || rng() < 0.8) {
@@ -392,48 +579,92 @@ export function chooseBotColumn(
     }
   }
 
-  // 3. Early opening variety on the first 2 bot moves
-  const totalPieces = working.flat().filter((v) => v !== 0).length;
+  // Count pieces played for opening book & adaptive endgame search
+  let totalPieces = 0;
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      if (working[r][c] !== 0) totalPieces++;
+    }
+  }
+
+  // 3. Opening book: Advanced always claims the centre column
   if (totalPieces <= 1) {
-    const openings = difficulty === "master" ? [3, 3, 2, 4] : [3, 2, 4, 1, 5];
+    if (difficulty === "advanced") {
+      return validCols.includes(3) ? 3 : validCols[0];
+    }
+    const openings = [3, 2, 4, 1, 5];
     const pick = openings[Math.floor(rng() * openings.length)];
     if (validCols.includes(pick)) return pick;
   }
 
-  if (difficulty === "gentle" && rng() < 0.28) {
-    // Occasional gentle non-losing exploratory move
+  if (difficulty === "gentle" && rng() < 0.25) {
     return validCols[Math.floor(rng() * validCols.length)];
   }
 
-  const depth =
-    difficulty === "gentle" ? 2 : difficulty === "clever" ? 4 : 5;
+  const maxDepth =
+    difficulty === "gentle" ? 2 : difficulty === "clever" ? 5 : 9;
+  const timeBudgetMs =
+    difficulty === "gentle" ? 40 : difficulty === "clever" ? 110 : 220;
 
-  // Score all valid moves to allow deterministic or gentle tie-breaking
-  let bestScore = -Infinity;
-  let candidates: number[] = [];
+  const deadline = performance.now() + timeBudgetMs;
+  const tt = new Map<string, TTEntry>();
+  const nodeCounter = { count: 0 };
 
-  for (const col of validCols) {
-    const row = getDropRow(working, col);
-    working[row][col] = bot;
-    const score = minimax(
-      working,
-      depth - 1,
-      -Infinity,
-      Infinity,
-      false,
-      bot
-    ).score;
-    working[row][col] = 0;
+  let bestOverallCol = validCols[0];
+  let orderedRootCols = [...validCols];
 
-    if (score > bestScore) {
-      bestScore = score;
-      candidates = [col];
-    } else if (score === bestScore) {
-      candidates.push(col);
+  // Iterative deepening: completes depth 3..maxDepth cleanly within timeBudgetMs
+  const startDepth = difficulty === "gentle" ? 2 : 3;
+  for (let depth = startDepth; depth <= maxDepth; depth++) {
+    let alpha = -Infinity;
+    let bestScore = -Infinity;
+    let bestColThisDepth = orderedRootCols[0];
+    let timedOut = false;
+
+    for (const col of orderedRootCols) {
+      const row = getDropRow(working, col);
+      working[row][col] = bot;
+      const score = minimax(
+        working,
+        depth - 1,
+        alpha,
+        Infinity,
+        false,
+        bot,
+        tt,
+        deadline,
+        nodeCounter
+      );
+      working[row][col] = 0;
+
+      if (Number.isNaN(score)) {
+        timedOut = true;
+        break;
+      }
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestColThisDepth = col;
+      }
+      if (bestScore > alpha) {
+        alpha = bestScore;
+      }
     }
+
+    if (timedOut) break;
+
+    bestOverallCol = bestColThisDepth;
+    // Put best move first for the next deeper iteration
+    orderedRootCols = [
+      bestColThisDepth,
+      ...orderedRootCols.filter((c) => c !== bestColThisDepth),
+    ];
+
+    // Stop early if a forced win is already found
+    if (bestScore >= WIN_SCORE) break;
   }
 
-  return candidates[Math.floor(rng() * candidates.length)];
+  return bestOverallCol;
 }
 
 /** Builds a pure-symbol, colour-free shareable board snapshot */
