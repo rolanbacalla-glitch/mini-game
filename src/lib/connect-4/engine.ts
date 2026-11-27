@@ -474,7 +474,7 @@ export function buildConnect4ShareCard(params: {
   }
 
   return [
-    `Daily Four · ${dateLabel}`,
+    `Connect 4 · ${dateLabel}`,
     `${pair.p1.name} (${pair.p1.shareGlyph}) vs ${pair.p2.name} (${pair.p2.shareGlyph})`,
     `${outcomeLabel} · ${moves} moves · ${durationLabel}`,
     "",

@@ -67,7 +67,7 @@ import {
   type MoveRecord,
   type OpponentMode,
   type Player,
-} from "@/lib/daily-pour/connect4";
+} from "@/lib/connect-4/engine";
 import { formatShortBritishDate, getTodayKey } from "@/lib/games";
 import {
   formatDuration,
@@ -196,7 +196,7 @@ function TactileDisc({
   );
 }
 
-export function DailyPourGame() {
+export function Connect4Game() {
   const searchParams = useSearchParams();
   const initialMode: GameMode =
     searchParams.get("mode") === "zen" ? "zen" : "daily";
@@ -581,7 +581,7 @@ export function DailyPourGame() {
 
   return (
     <div className="min-h-screen flex flex-col">
-      <TopBar backHref="/" title="Daily Four" />
+      <TopBar backHref="/" title="Connect 4" />
 
       <main className="flex-1 w-full max-w-5xl mx-auto px-4 sm:px-6 pt-5 pb-16">
         {/* Top Mode Bar & Clean Unboxed Metadata */}
@@ -618,14 +618,14 @@ export function DailyPourGame() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  aria-label="How to play Daily Four"
+                  aria-label="How to play Connect 4"
                   className="w-10 px-0 shrink-0"
                 >
                   <HelpCircle className="w-4 h-4" />
                 </Button>
               </DialogTrigger>
               <DialogContent>
-                <DialogTitle>How to play Daily Four</DialogTitle>
+                <DialogTitle>How to play Connect 4</DialogTitle>
                 <DialogDescription>
                   Classic four-in-a-row designed to work completely without colour.
                 </DialogDescription>

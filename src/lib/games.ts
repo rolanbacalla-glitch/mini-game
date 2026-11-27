@@ -23,9 +23,9 @@ export const GAMES: GameMeta[] = [
     accentColour: "var(--tile-emerald-fill)",
   },
   {
-    id: "daily-pour",
-    slug: "/daily-pour",
-    title: "Daily Four",
+    id: "connect-4",
+    slug: "/connect-4",
+    title: "Connect 4",
     subtitle: "Drop engraved symbol discs to connect four in a row — built without relying on colour.",
     duration: "2–3 mins",
     status: "live",

@@ -87,7 +87,7 @@ function LoomPreviewGraphic() {
   );
 }
 
-function DailyFourPreviewGraphic() {
+function Connect4PreviewGraphic() {
   // 5x4 miniature monochrome symbol Connect 4 grid (1 = smooth ivory Coffee, 2 = grooved charcoal Croissant)
   const cells: Array<0 | 1 | 2> = [
     0, 0, 0, 1, 0,
@@ -152,7 +152,7 @@ function ChromaCalmPreviewGraphic() {
 
 function GamePreview({ id }: { id: string }) {
   if (id === "loom-and-latch") return <LoomPreviewGraphic />;
-  if (id === "daily-pour") return <DailyFourPreviewGraphic />;
+  if (id === "connect-4") return <Connect4PreviewGraphic />;
   return <ChromaCalmPreviewGraphic />;
 }
 
@@ -252,7 +252,7 @@ export function HubClient() {
               const solvedBadgeText =
                 game.id === "loom-and-latch" && todayLoom
                   ? formatDuration(todayLoom.elapsedSeconds)
-                  : game.id === "daily-pour" && todayFour
+                  : game.id === "connect-4" && todayFour
                     ? `${todayFour.moves} moves`
                     : game.id === "chroma-calm" && todayChroma
                       ? `${todayChroma.swaps} swaps`
