@@ -158,10 +158,10 @@ const ORTHO_DIRS: Coord[] = [
 ];
 
 const PIECE_SIZE_PROFILES: number[][] = [
-  [5, 4, 4, 4, 4, 4],
+  [5, 5, 5, 5, 5],
   [5, 5, 4, 4, 4, 3],
-  [5, 4, 4, 4, 5, 3],
-  [4, 4, 4, 4, 3, 3, 3],
+  [5, 5, 5, 4, 3, 3],
+  [5, 4, 4, 4, 4, 4],
 ];
 
 function partitionBoard(rng: () => number): Coord[][] {
@@ -323,13 +323,13 @@ export function generateLoomPuzzle(seed: string): LoomPuzzle {
     [palette[i], palette[j]] = [palette[j], palette[i]];
   }
 
-  // Pick 3 distinct piece indices to receive brass Latch Pegs + Eyelets
+  // Pick 2 distinct piece indices to receive brass Latch Pegs + Eyelets
   const pieceIndices = regions.map((_, idx) => idx);
   for (let i = pieceIndices.length - 1; i > 0; i--) {
     const j = Math.floor(rng() * (i + 1));
     [pieceIndices[i], pieceIndices[j]] = [pieceIndices[j], pieceIndices[i]];
   }
-  const latchedSet = new Set(pieceIndices.slice(0, 3));
+  const latchedSet = new Set(pieceIndices.slice(0, 2));
 
   const pegs: LatchPeg[] = [];
   const pieces: PuzzlePiece[] = regions.map((region, idx) => {
@@ -354,8 +354,8 @@ export function generateLoomPuzzle(seed: string): LoomPuzzle {
       });
     }
 
-    // Rotate pieces in tray so the player enjoys tactile rotation
-    const initialRotation = Math.floor(rng() * 4);
+    // Always start pieces rotated away from their solution orientation
+    const initialRotation = 1 + Math.floor(rng() * 3);
 
     return {
       id,

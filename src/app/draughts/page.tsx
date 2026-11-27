@@ -5,7 +5,7 @@ import { DraughtsGame } from "@/components/draughts/DraughtsGame";
 export const metadata: Metadata = {
   title: "Draughts — Coffee Break",
   description:
-    "Outmanoeuvre an Advanced AI across a tactile 8×8 English Draughts board with forced captures and crowned kings.",
+    "Play classic English Draughts across a tactile 8×8 board with forced captures, multi-jumps, and crowned kings.",
 };
 
 export default function DraughtsPage() {

@@ -771,7 +771,6 @@ export function buildDraughtsShareCard(params: {
   capturedByP1: number;
   capturedByP2: number;
   durationLabel: string;
-  difficultyLabel: string;
 }): string {
   const {
     dateLabel,
@@ -780,12 +779,11 @@ export function buildDraughtsShareCard(params: {
     capturedByP1,
     capturedByP2,
     durationLabel,
-    difficultyLabel,
   } = params;
 
   return [
     `Draughts · ${dateLabel}`,
-    `${outcomeLabel} (${difficultyLabel})`,
+    outcomeLabel,
     `${turns} turns · ${durationLabel}`,
     `Captured: ○ ${capturedByP1} · ● ${capturedByP2}`,
     "",

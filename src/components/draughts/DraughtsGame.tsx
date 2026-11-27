@@ -50,7 +50,6 @@ import {
   getLegalMoves,
   isPlayableSquare,
   type Coord,
-  type Difficulty,
   type DraughtsBoard,
   type DraughtsMove,
   type OpponentMode,
@@ -231,7 +230,6 @@ export function DraughtsGame() {
   const [todayKey] = useState<string>(() => getTodayKey());
 
   const [opponentMode, setOpponentMode] = useState<OpponentMode>("bot");
-  const [difficulty, setDifficulty] = useState<Difficulty>("advanced");
 
   const [board, setBoard] = useState<DraughtsBoard>(() => createInitialBoard());
   const [currentPlayer, setCurrentPlayer] = useState<Player>(1);
@@ -257,7 +255,6 @@ export function DraughtsGame() {
   const botTimersRef = useRef<number[]>([]);
 
   const activeOpponent: OpponentMode = mode === "daily" ? "bot" : opponentMode;
-  const activeDifficulty: Difficulty = mode === "daily" ? "advanced" : difficulty;
 
   const latestStateRef = useRef({
     board,
@@ -265,7 +262,6 @@ export function DraughtsGame() {
     turns,
     lastMoveFrom,
     lastMoveTo,
-    activeDifficulty,
   });
   latestStateRef.current = {
     board,
@@ -273,7 +269,6 @@ export function DraughtsGame() {
     turns,
     lastMoveFrom,
     lastMoveTo,
-    activeDifficulty,
   };
 
   const prefersReducedMotion = Boolean(useReducedMotion());
@@ -458,7 +453,7 @@ export function DraughtsGame() {
       if (outcome.winner === 1 || outcome.winner === "draw") {
         const resultType = outcome.winner === 1 ? "win" : "draw";
         const outcomeLabel =
-          resultType === "win" ? "Won against Advanced AI" : "Honourable draw";
+          resultType === "win" ? "Won the board" : "Honourable draw";
         const shareText = buildDraughtsShareCard({
           dateLabel: formatShortBritishDate(todayKey),
           outcomeLabel,
@@ -466,7 +461,6 @@ export function DraughtsGame() {
           capturedByP1,
           capturedByP2,
           durationLabel: formatDuration(elapsedSeconds),
-          difficultyLabel: "Advanced AI",
         });
 
         const updated = recordDraughtsDailyCompletion({
@@ -516,11 +510,7 @@ export function DraughtsGame() {
       if (cancelled) return;
 
       const snapshot = latestStateRef.current;
-      const chosen = chooseDraughtsMove(
-        snapshot.board,
-        2,
-        snapshot.activeDifficulty
-      );
+      const chosen = chooseDraughtsMove(snapshot.board, 2, "advanced");
       setBotThinking(false);
 
       if (cancelled || !chosen) return;
@@ -748,20 +738,16 @@ export function DraughtsGame() {
     setActiveChain(null);
   };
 
-  const difficultyTitle = `${activeDifficulty[0].toUpperCase()}${activeDifficulty.slice(1)}`;
-
   const outcomeTitle = useMemo(() => {
     if (outcome.winner === "draw") return "Match drawn (40-move rule).";
     if (outcome.winner === 1) {
       return activeOpponent === "bot" ? "You won the board." : "Player 1 wins!";
     }
     if (outcome.winner === 2) {
-      return activeOpponent === "bot"
-        ? `${difficultyTitle} AI wins.`
-        : "Player 2 wins!";
+      return activeOpponent === "bot" ? "Draughts Bot wins." : "Player 2 wins!";
     }
     return "";
-  }, [activeOpponent, difficultyTitle, outcome.winner]);
+  }, [activeOpponent, outcome.winner]);
 
   const outcomeDetail = useMemo(() => {
     if (outcome.reason === "captured-all") return "All opposing pieces cleared";
@@ -780,10 +766,6 @@ export function DraughtsGame() {
       capturedByP2,
       durationLabel:
         mode === "daily" ? formatDuration(elapsedSeconds) : "Untimed",
-      difficultyLabel:
-        activeOpponent === "bot"
-          ? `${activeDifficulty[0].toUpperCase()}${activeDifficulty.slice(1)} AI`
-          : "2 Players",
     });
 
     try {
@@ -798,7 +780,7 @@ export function DraughtsGame() {
   };
 
   const p1Label = activeOpponent === "bot" ? "You" : "Player 1";
-  const p2Label = activeOpponent === "bot" ? "Draughts AI" : "Player 2";
+  const p2Label = activeOpponent === "bot" ? "Draughts Bot" : "Player 2";
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -848,7 +830,7 @@ export function DraughtsGame() {
               <DialogContent>
                 <DialogTitle>How to play Draughts</DialogTitle>
                 <DialogDescription>
-                  Classic English Draughts against an Advanced AI opponent.
+                  Classic English Draughts with forced captures and crowned kings.
                 </DialogDescription>
                 <ul className="mt-4 space-y-2.5 text-sm text-[var(--sys-color-text-secondary)] list-disc pl-5">
                   <li>
@@ -894,7 +876,7 @@ export function DraughtsGame() {
                 {isFinished
                   ? outcomeTitle
                   : botThinking || animatingBot
-                    ? `${difficultyTitle} AI is calculating…`
+                    ? "Draughts Bot is thinking…"
                     : activeChain
                       ? "Multi-jump active — tap the next highlighted square"
                       : hasMandatoryCapture
@@ -1181,15 +1163,12 @@ export function DraughtsGame() {
                       </div>
                       <div className="text-xs text-[var(--sys-color-text-muted)]">
                         {botThinking || animatingBot ? (
-                          "Calculating…"
+                          "Thinking…"
                         ) : (
                           <span className="font-mono tabular-nums">
-                            {activeOpponent === "bot"
-                              ? `${activeDifficulty[0].toUpperCase()}${activeDifficulty.slice(1)} AI · `
-                              : ""}
                             {p2Total} left
                             {pieceCounts.p2Kings > 0
-                              ? ` · ${pieceCounts.p2Kings}K`
+                              ? ` · ${pieceCounts.p2Kings} king${pieceCounts.p2Kings > 1 ? "s" : ""}`
                               : ""}
                           </span>
                         )}
@@ -1230,7 +1209,7 @@ export function DraughtsGame() {
               </div>
             </div>
 
-            {/* Free Play Settings (Defaults to Advanced AI) */}
+            {/* Free Play Settings */}
             {mode === "zen" && (
               <div className="tonal-card p-4 space-y-4">
                 <div>
@@ -1274,35 +1253,6 @@ export function DraughtsGame() {
                     </button>
                   </div>
                 </div>
-
-                {opponentMode === "bot" && (
-                  <div>
-                    <h2 className="text-sm font-semibold text-[var(--sys-color-text-primary)] mb-2">
-                      Bot skill
-                    </h2>
-                    <div className="grid grid-cols-3 gap-1.5 p-1 rounded-xl bg-[var(--sys-color-surface-low)] border border-[var(--sys-color-border-subtle)]">
-                      {(["gentle", "clever", "advanced"] as Difficulty[]).map(
-                        (lvl) => (
-                          <button
-                            key={lvl}
-                            type="button"
-                            onClick={() => {
-                              soundEngine.playPickup();
-                              setDifficulty(lvl);
-                            }}
-                            className={`min-h-[38px] px-2 py-1.5 rounded-lg text-xs font-medium capitalize transition-colors cursor-pointer whitespace-nowrap ${
-                              difficulty === lvl
-                                ? "bg-[var(--sys-color-surface-lowest)] text-[var(--sys-color-text-primary)] shadow-xs"
-                                : "text-[var(--sys-color-text-secondary)] hover:text-[var(--sys-color-text-primary)]"
-                            }`}
-                          >
-                            {lvl}
-                          </button>
-                        )
-                      )}
-                    </div>
-                  </div>
-                )}
               </div>
             )}
 

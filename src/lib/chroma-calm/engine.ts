@@ -185,14 +185,15 @@ export function generateChromaPuzzle(seed: string): ChromaPuzzle {
     ];
   }
 
-  // Ensure puzzle isn't trivially solved
-  let matches = 0;
+  // Ensure a full derangement so no unlocked swatch starts already solved
   for (let i = 0; i < movableIndices.length; i++) {
-    if (shuffledMovable[i] === movableIndices[i]) matches++;
-  }
-  if (matches > 4) {
-    const first = shuffledMovable.shift()!;
-    shuffledMovable.push(first);
+    if (shuffledMovable[i] === movableIndices[i]) {
+      const swapWith = (i + 1) % movableIndices.length;
+      [shuffledMovable[i], shuffledMovable[swapWith]] = [
+        shuffledMovable[swapWith],
+        shuffledMovable[i],
+      ];
+    }
   }
 
   const initialBoard: ChromaSwatch[] = [...solvedBoard];

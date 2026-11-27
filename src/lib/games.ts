@@ -48,7 +48,7 @@ export const GAMES: GameMeta[] = [
     id: "draughts",
     slug: "/draughts",
     title: "Draughts",
-    subtitle: "Outmanoeuvre an Advanced AI across a tactile 8×8 board with forced jumps and crowned kings.",
+    subtitle: "Play classic English Draughts across a tactile 8×8 board with forced jumps and crowned kings.",
     duration: "3–5 mins",
     status: "live",
     statusLabel: "Play today's ritual",

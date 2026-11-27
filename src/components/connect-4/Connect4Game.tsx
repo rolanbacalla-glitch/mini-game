@@ -60,7 +60,6 @@ import {
   getEmblemPairById,
   ROWS,
   type Board,
-  type Difficulty,
   type EmblemPair,
   type EmblemPairId,
   type EmblemSpec,
@@ -291,7 +290,6 @@ export function Connect4Game() {
   const pair = useMemo(() => getEmblemPairById(emblemPairId), [emblemPairId]);
 
   const [opponentMode, setOpponentMode] = useState<OpponentMode>("bot");
-  const [difficulty, setDifficulty] = useState<Difficulty>("advanced");
 
   const [board, setBoard] = useState<Board>(() => createEmptyBoard());
   const [currentPlayer, setCurrentPlayer] = useState<Player>(1);
@@ -310,7 +308,6 @@ export function Connect4Game() {
   const recordedMatchRef = useRef<number>(0);
 
   const activeOpponent: OpponentMode = mode === "daily" ? "bot" : opponentMode;
-  const activeDifficulty: Difficulty = mode === "daily" ? "advanced" : difficulty;
 
   const prefersReducedMotion = Boolean(useReducedMotion());
 
@@ -507,7 +504,7 @@ export function Connect4Game() {
         mode === "daily"
           ? createSeededRng(`daily-four::${todayKey}::m${history.length}::n${matchNonce}`)
           : Math.random;
-      const botCol = chooseBotColumn(board, 2, activeDifficulty, rng);
+      const botCol = chooseBotColumn(board, 2, "advanced", rng);
       setBotThinking(false);
       if (botCol !== -1) {
         commitMove(botCol, 2);
@@ -516,7 +513,6 @@ export function Connect4Game() {
 
     return () => window.clearTimeout(timer);
   }, [
-    activeDifficulty,
     activeOpponent,
     board,
     commitMove,
@@ -1258,12 +1254,10 @@ export function Connect4Game() {
                         {result.winner === 2
                           ? "Winner · 4 connected"
                           : botThinking
-                            ? "Calculating…"
-                            : activeOpponent === "bot"
-                              ? `${activeDifficulty[0].toUpperCase()}${activeDifficulty.slice(1)} AI · grooved disc`
-                              : !isFinished && currentPlayer === 2
-                                ? "Active turn · grooved disc"
-                                : "Grooved charcoal disc"}
+                            ? "Thinking…"
+                            : !isFinished && currentPlayer === 2
+                              ? "Active turn · grooved disc"
+                              : "Grooved charcoal disc"}
                       </div>
                     </div>
                   </div>
@@ -1351,7 +1345,7 @@ export function Connect4Game() {
               </div>
             </div>
 
-            {/* Free Play Options (Opponent & Difficulty) */}
+            {/* Free Play Options (Opponent) */}
             {mode === "zen" && (
               <div className="tonal-card p-4 space-y-4">
                 <div>
@@ -1395,35 +1389,6 @@ export function Connect4Game() {
                     </button>
                   </div>
                 </div>
-
-                {opponentMode === "bot" && (
-                  <div>
-                    <h2 className="text-sm font-semibold text-[var(--sys-color-text-primary)] mb-2">
-                      Bot skill
-                    </h2>
-                    <div className="grid grid-cols-3 gap-1.5 p-1 rounded-xl bg-[var(--sys-color-surface-low)] border border-[var(--sys-color-border-subtle)]">
-                      {(["gentle", "clever", "advanced"] as Difficulty[]).map(
-                        (lvl) => (
-                          <button
-                            key={lvl}
-                            type="button"
-                            onClick={() => {
-                              soundEngine.playPickup();
-                              setDifficulty(lvl);
-                            }}
-                            className={`min-h-[38px] px-2 py-1.5 rounded-lg text-xs font-medium capitalize transition-colors cursor-pointer whitespace-nowrap ${
-                              difficulty === lvl
-                                ? "bg-[var(--sys-color-surface-lowest)] text-[var(--sys-color-text-primary)] shadow-xs"
-                                : "text-[var(--sys-color-text-secondary)] hover:text-[var(--sys-color-text-primary)]"
-                            }`}
-                          >
-                            {lvl}
-                          </button>
-                        )
-                      )}
-                    </div>
-                  </div>
-                )}
               </div>
             )}
 
