@@ -341,3 +341,115 @@ export function recordChromaZenCompletion(): ChromaStats {
   }
   return nextStats;
 }
+
+/* ---------- Draughts Persistence ---------- */
+export interface DraughtsCompletionRecord {
+  dateKey: string;
+  outcome: "win" | "draw";
+  turns: number;
+  elapsedSeconds: number;
+  shareText: string;
+  completedAt: string;
+}
+
+export interface DraughtsStats {
+  currentStreak: number;
+  bestStreak: number;
+  totalDailySolved: number;
+  totalZenPlayed: number;
+  lastCompletedDate: string | null;
+  history: Record<string, DraughtsCompletionRecord>;
+}
+
+const DRAUGHTS_STATS_KEY = "coffee-break:draughts:stats:v1";
+
+const DEFAULT_DRAUGHTS_STATS: DraughtsStats = {
+  currentStreak: 0,
+  bestStreak: 0,
+  totalDailySolved: 0,
+  totalZenPlayed: 0,
+  lastCompletedDate: null,
+  history: {},
+};
+
+export function loadDraughtsStats(): DraughtsStats {
+  if (typeof window === "undefined") return DEFAULT_DRAUGHTS_STATS;
+  try {
+    const raw = window.localStorage.getItem(DRAUGHTS_STATS_KEY);
+    if (!raw) return DEFAULT_DRAUGHTS_STATS;
+    const parsed = JSON.parse(raw) as Partial<DraughtsStats>;
+    return {
+      ...DEFAULT_DRAUGHTS_STATS,
+      ...parsed,
+      history: parsed.history ?? {},
+    };
+  } catch {
+    return DEFAULT_DRAUGHTS_STATS;
+  }
+}
+
+export function recordDraughtsDailyCompletion(
+  record: DraughtsCompletionRecord
+): DraughtsStats {
+  const stats = loadDraughtsStats();
+  const alreadySolved = Boolean(stats.history[record.dateKey]);
+  const updatedHistory = {
+    ...stats.history,
+    [record.dateKey]: record,
+  };
+
+  let currentStreak = stats.currentStreak;
+  let totalDailySolved = stats.totalDailySolved;
+
+  if (!alreadySolved) {
+    totalDailySolved += 1;
+    const yesterday = getPreviousDateKey(record.dateKey);
+    if (stats.lastCompletedDate === yesterday) {
+      currentStreak = stats.currentStreak + 1;
+    } else if (stats.lastCompletedDate === record.dateKey) {
+      currentStreak = Math.max(1, stats.currentStreak);
+    } else {
+      currentStreak = 1;
+    }
+  }
+
+  const nextStats: DraughtsStats = {
+    ...stats,
+    currentStreak,
+    bestStreak: Math.max(stats.bestStreak, currentStreak),
+    totalDailySolved,
+    lastCompletedDate: record.dateKey,
+    history: updatedHistory,
+  };
+
+  if (typeof window !== "undefined") {
+    try {
+      window.localStorage.setItem(
+        DRAUGHTS_STATS_KEY,
+        JSON.stringify(nextStats)
+      );
+    } catch {
+      // Ignore storage quota errors
+    }
+  }
+  return nextStats;
+}
+
+export function recordDraughtsZenCompletion(): DraughtsStats {
+  const stats = loadDraughtsStats();
+  const nextStats: DraughtsStats = {
+    ...stats,
+    totalZenPlayed: stats.totalZenPlayed + 1,
+  };
+  if (typeof window !== "undefined") {
+    try {
+      window.localStorage.setItem(
+        DRAUGHTS_STATS_KEY,
+        JSON.stringify(nextStats)
+      );
+    } catch {
+      // Ignore storage quota errors
+    }
+  }
+  return nextStats;
+}

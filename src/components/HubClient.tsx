@@ -9,6 +9,7 @@ import {
   Clock,
   Coffee,
   Croissant,
+  Crown,
   Flame,
   Sparkles,
 } from "lucide-react";
@@ -30,9 +31,11 @@ import {
   formatDuration,
   loadChromaStats,
   loadDailyFourStats,
+  loadDraughtsStats,
   loadLoomStats,
   type ChromaStats,
   type DailyFourStats,
+  type DraughtsStats,
   type LoomStats,
 } from "@/lib/storage";
 
@@ -150,9 +153,55 @@ function ChromaCalmPreviewGraphic() {
   );
 }
 
+function DraughtsPreviewGraphic() {
+  // 4x4 miniature tactile monochrome checkerboard with Ivory King & Charcoal men
+  const layout: Array<0 | 1 | 2 | 3> = [
+    0, 2, 0, 2,
+    0, 0, 2, 0,
+    0, 3, 0, 0,
+    1, 0, 1, 0,
+  ];
+
+  return (
+    <div className="w-full h-36 rounded-xl bg-[var(--sys-color-surface-low)] border border-[var(--sys-color-border-subtle)] p-3 flex items-center justify-center">
+      <div className="grid grid-cols-4 grid-rows-4 w-28 h-28 rounded-lg overflow-hidden border border-[var(--sys-color-border-subtle)]">
+        {layout.map((piece, idx) => {
+          const r = Math.floor(idx / 4);
+          const c = idx % 4;
+          const darkSq = (r + c) % 2 === 1;
+          return (
+            <div
+              key={idx}
+              className={`flex items-center justify-center ${
+                darkSq
+                  ? "bg-[var(--sys-color-surface-high)]"
+                  : "bg-[var(--sys-color-surface-lowest)]"
+              }`}
+            >
+              {(piece === 1 || piece === 3) && (
+                <span className="w-5 h-5 rounded-full bg-[var(--sys-color-surface-lowest)] border border-[var(--sys-color-text-primary)] text-[var(--sys-color-text-primary)] flex items-center justify-center">
+                  {piece === 3 && (
+                    <Crown className="w-2.5 h-2.5" strokeWidth={2.3} aria-hidden="true" />
+                  )}
+                </span>
+              )}
+              {piece === 2 && (
+                <span className="w-5 h-5 rounded-full bg-[var(--sys-color-text-primary)] flex items-center justify-center">
+                  <span className="w-3 h-3 rounded-full border border-dashed border-[var(--sys-color-surface-lowest)]/60" />
+                </span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function GamePreview({ id }: { id: string }) {
   if (id === "loom-and-latch") return <LoomPreviewGraphic />;
   if (id === "connect-4") return <Connect4PreviewGraphic />;
+  if (id === "draughts") return <DraughtsPreviewGraphic />;
   return <ChromaCalmPreviewGraphic />;
 }
 
@@ -162,6 +211,7 @@ export function HubClient() {
   const [loomStats, setLoomStats] = useState<LoomStats | null>(null);
   const [fourStats, setFourStats] = useState<DailyFourStats | null>(null);
   const [chromaStats, setChromaStats] = useState<ChromaStats | null>(null);
+  const [draughtsStats, setDraughtsStats] = useState<DraughtsStats | null>(null);
 
   useEffect(() => {
     const now = new Date();
@@ -170,28 +220,37 @@ export function HubClient() {
     setLoomStats(loadLoomStats());
     setFourStats(loadDailyFourStats());
     setChromaStats(loadChromaStats());
+    setDraughtsStats(loadDraughtsStats());
   }, []);
 
   const todayLoom = todayKey && loomStats ? loomStats.history[todayKey] : undefined;
   const todayFour = todayKey && fourStats ? fourStats.history[todayKey] : undefined;
   const todayChroma =
     todayKey && chromaStats ? chromaStats.history[todayKey] : undefined;
+  const todayDraughts =
+    todayKey && draughtsStats ? draughtsStats.history[todayKey] : undefined;
   const liveGamesCount = GAMES.filter((g) => g.status === "live").length;
   const completedTodayCount =
-    (todayLoom ? 1 : 0) + (todayFour ? 1 : 0) + (todayChroma ? 1 : 0);
+    (todayLoom ? 1 : 0) +
+    (todayFour ? 1 : 0) +
+    (todayChroma ? 1 : 0) +
+    (todayDraughts ? 1 : 0);
   const topStreak = Math.max(
     loomStats?.currentStreak ?? 0,
     fourStats?.currentStreak ?? 0,
-    chromaStats?.currentStreak ?? 0
+    chromaStats?.currentStreak ?? 0,
+    draughtsStats?.currentStreak ?? 0
   );
   const totalDaily =
     (loomStats?.totalDailySolved ?? 0) +
     (fourStats?.totalDailySolved ?? 0) +
-    (chromaStats?.totalDailySolved ?? 0);
+    (chromaStats?.totalDailySolved ?? 0) +
+    (draughtsStats?.totalDailySolved ?? 0);
   const totalZen =
     (loomStats?.totalZenSolved ?? 0) +
     (fourStats?.totalZenPlayed ?? 0) +
-    (chromaStats?.totalZenSolved ?? 0);
+    (chromaStats?.totalZenSolved ?? 0) +
+    (draughtsStats?.totalZenPlayed ?? 0);
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -246,7 +305,7 @@ export function HubClient() {
 
         {/* Game Shelf — Solid 5-Step Tonal Cards */}
         <section aria-label="Available coffee-break games">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             {GAMES.map((game: GameMeta, index: number) => {
               const isLive = game.status === "live";
               const solvedBadgeText =
@@ -256,7 +315,9 @@ export function HubClient() {
                     ? `${todayFour.moves} moves`
                     : game.id === "chroma-calm" && todayChroma
                       ? `${todayChroma.swaps} swaps`
-                      : null;
+                      : game.id === "draughts" && todayDraughts
+                        ? `${todayDraughts.turns} turns`
+                        : null;
               const isSolvedToday = Boolean(solvedBadgeText);
 
               return (

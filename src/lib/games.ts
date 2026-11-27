@@ -44,6 +44,17 @@ export const GAMES: GameMeta[] = [
     restorativeBenefit: "Gentle left-to-right brain switch into pure visual perception.",
     accentColour: "var(--tile-lavender-fill)",
   },
+  {
+    id: "draughts",
+    slug: "/draughts",
+    title: "Draughts",
+    subtitle: "Outmanoeuvre an Advanced AI across a tactile 8×8 board with forced jumps and crowned kings.",
+    duration: "3–5 mins",
+    status: "live",
+    statusLabel: "Play today's ritual",
+    restorativeBenefit: "Deep diagonal foresight with crisp monochrome discs and multi-jump chains.",
+    accentColour: "var(--tile-slate-fill)",
+  },
 ];
 
 export function getTodayKey(date: Date = new Date()): string {
