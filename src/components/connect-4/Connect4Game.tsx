@@ -9,7 +9,7 @@ import React, {
 } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
   Anchor,
   ArrowDown,
@@ -118,15 +118,19 @@ function TactileDisc({
   pair,
   size = "board",
   isWinning = false,
+  winOrder = 0,
   isDimmed = false,
   isLatest = false,
+  reducedMotion = false,
 }: {
   player: Player;
   pair: EmblemPair;
   size?: "board" | "preview" | "badge";
   isWinning?: boolean;
+  winOrder?: number;
   isDimmed?: boolean;
   isLatest?: boolean;
+  reducedMotion?: boolean;
 }) {
   const spec = player === 1 ? pair.p1 : pair.p2;
   const isP1 = player === 1;
@@ -145,16 +149,76 @@ function TactileDisc({
         ? "w-4 h-4 sm:w-[18px] sm:h-[18px]"
         : "w-[54%] h-[54%]";
 
+  const cascadeDelay = 0.16 + winOrder * 0.095;
+  const animateWin = isWinning && size === "board" && !reducedMotion;
+
   return (
-    <div
-      className={`relative rounded-full flex items-center justify-center transition-all duration-200 select-none ${sizeClasses} ${
+    <motion.div
+      animate={
+        animateWin
+          ? {
+              scale: [1, 1.13, 1.04],
+              rotate: [0, -5, 3, 0],
+              opacity: 1,
+            }
+          : {
+              scale: isWinning && size === "board" ? 1.04 : 1,
+              rotate: 0,
+              opacity: isDimmed ? 0.38 : 1,
+            }
+      }
+      transition={
+        animateWin
+          ? {
+              duration: 0.52,
+              delay: cascadeDelay,
+              ease: [0.22, 1, 0.36, 1],
+            }
+          : {
+              duration: 0.28,
+              delay: isDimmed && !reducedMotion ? 0.14 : 0,
+              ease: "easeOut",
+            }
+      }
+      className={`relative rounded-full flex items-center justify-center select-none ${sizeClasses} ${
         isP1
           ? "bg-[var(--sys-color-surface-lowest)] text-[var(--sys-color-text-primary)] border-2 border-[var(--sys-color-text-primary)] shadow-[inset_0_2px_0_var(--sys-specular-top),0_2px_5px_rgba(0,0,0,0.10)]"
           : "bg-[var(--sys-color-text-primary)] text-[var(--sys-color-surface-lowest)] border-2 border-[var(--sys-color-text-primary)] shadow-[inset_0_2px_4px_rgba(0,0,0,0.22),0_2px_5px_rgba(0,0,0,0.12)]"
-      } ${isWinning ? "ring-2 ring-offset-2 ring-[var(--sys-color-text-primary)] ring-offset-[var(--sys-color-surface-container)] scale-[1.04] z-20" : ""} ${
-        isDimmed ? "opacity-40" : "opacity-100"
+      } ${
+        isWinning
+          ? "ring-2 ring-offset-2 ring-[var(--sys-color-text-primary)] ring-offset-[var(--sys-color-surface-container)] z-20"
+          : ""
       }`}
     >
+      {/* Expanding monochrome ripple halo on each winning disc in sequence */}
+      {animateWin && (
+        <>
+          <motion.span
+            aria-hidden="true"
+            initial={{ scale: 0.85, opacity: 0 }}
+            animate={{ scale: [0.85, 1.44], opacity: [0.75, 0] }}
+            transition={{
+              duration: 0.62,
+              delay: cascadeDelay + 0.02,
+              ease: [0.16, 1, 0.3, 1],
+            }}
+            className="pointer-events-none absolute -inset-1 rounded-full border-2 border-[var(--sys-color-text-primary)]"
+          />
+          <motion.span
+            aria-hidden="true"
+            initial={{ opacity: 0, scale: 0.96 }}
+            animate={{ opacity: [0.3, 0.72, 0.3], scale: [1, 1.07, 1] }}
+            transition={{
+              duration: 2.6,
+              delay: cascadeDelay + 0.55,
+              repeat: Infinity,
+              ease: "easeInOut",
+            }}
+            className="pointer-events-none absolute -inset-[5px] rounded-full border border-dashed border-[var(--sys-color-text-primary)]/70"
+          />
+        </>
+      )}
+
       {/* Player 1 tactile smooth inner bevel ring */}
       {isP1 && size === "board" && (
         <span
@@ -175,11 +239,29 @@ function TactileDisc({
         />
       )}
 
-      <EmblemIcon
-        iconKey={spec.iconKey}
-        className={`relative z-10 ${iconClasses}`}
-        strokeWidth={size === "badge" ? 2.2 : 2.35}
-      />
+      <motion.span
+        animate={
+          animateWin
+            ? { scale: [1, 1.22, 1] }
+            : { scale: 1 }
+        }
+        transition={
+          animateWin
+            ? {
+                duration: 0.44,
+                delay: cascadeDelay + 0.06,
+                ease: [0.22, 1, 0.36, 1],
+              }
+            : { duration: 0.15 }
+        }
+        className="relative z-10 flex items-center justify-center w-full h-full"
+      >
+        <EmblemIcon
+          iconKey={spec.iconKey}
+          className={iconClasses}
+          strokeWidth={size === "badge" ? 2.2 : 2.35}
+        />
+      </motion.span>
 
       {/* Subtle latest-move corner notch indicator */}
       {isLatest && !isWinning && size === "board" && (
@@ -192,7 +274,7 @@ function TactileDisc({
           }`}
         />
       )}
-    </div>
+    </motion.div>
   );
 }
 
@@ -230,17 +312,32 @@ export function Connect4Game() {
   const activeOpponent: OpponentMode = mode === "daily" ? "bot" : opponentMode;
   const activeDifficulty: Difficulty = mode === "daily" ? "clever" : difficulty;
 
+  const prefersReducedMotion = Boolean(useReducedMotion());
+
   const result = useMemo(() => checkBoardResult(board), [board]);
   const isFinished = result.winner !== null;
   const lastMove = history.length > 0 ? history[history.length - 1] : null;
 
-  const winningSet = useMemo(() => {
-    const set = new Set<string>();
-    for (const [r, c] of result.winningCells) {
-      set.add(`${r},${c}`);
+  // Order winning cells so the celebratory ripple sweeps cleanly from the winning drop end
+  const orderedWinningCells = useMemo(() => {
+    const cells = result.winningCells;
+    if (cells.length < 4) return cells;
+    if (lastMove) {
+      const lastCell = cells[cells.length - 1];
+      if (lastCell[0] === lastMove.row && lastCell[1] === lastMove.col) {
+        return [...cells].reverse();
+      }
     }
-    return set;
-  }, [result.winningCells]);
+    return cells;
+  }, [lastMove, result.winningCells]);
+
+  const winningOrderMap = useMemo(() => {
+    const map = new Map<string, number>();
+    orderedWinningCells.forEach(([r, c], idx) => {
+      map.set(`${r},${c}`, idx);
+    });
+    return map;
+  }, [orderedWinningCells]);
 
   const p1Count = useMemo(
     () => history.filter((m) => m.player === 1).length,
@@ -563,18 +660,28 @@ export function Connect4Game() {
   const previewLandingRow =
     activePreviewCol !== null ? getDropRow(board, activePreviewCol) : -1;
 
-  // Winning line SVG coordinates (0..700 x 0..600)
+  // Winning line SVG coordinates & flourish anchor points (0..700 x 0..600)
   const winningLineCoords = useMemo(() => {
-    if (result.winningCells.length < 4) return null;
-    const first = result.winningCells[0];
-    const last = result.winningCells[result.winningCells.length - 1];
+    if (orderedWinningCells.length < 4) return null;
+    const first = orderedWinningCells[0];
+    const last = orderedWinningCells[orderedWinningCells.length - 1];
+    const x1 = (first[1] + 0.5) * 100;
+    const y1 = (first[0] + 0.5) * 100;
+    const x2 = (last[1] + 0.5) * 100;
+    const y2 = (last[0] + 0.5) * 100;
     return {
-      x1: (first[1] + 0.5) * 100,
-      y1: (first[0] + 0.5) * 100,
-      x2: (last[1] + 0.5) * 100,
-      y2: (last[0] + 0.5) * 100,
+      x1,
+      y1,
+      x2,
+      y2,
+      midX: (x1 + x2) / 2,
+      midY: (y1 + y2) / 2,
+      nodes: orderedWinningCells.map(([r, c]) => ({
+        x: (c + 0.5) * 100,
+        y: (r + 0.5) * 100,
+      })),
     };
-  }, [result.winningCells]);
+  }, [orderedWinningCells]);
 
   const p1Label = activeOpponent === "bot" ? "You" : "Player 1";
   const p2Label = activeOpponent === "bot" ? "Barista Bot" : "Player 2";
@@ -729,7 +836,8 @@ export function Connect4Game() {
                       const isColumnHovered = activePreviewCol === col;
                       const isLandingTarget =
                         isColumnHovered && previewLandingRow === row && cell === 0;
-                      const isWinningCell = winningSet.has(`${row},${col}`);
+                      const winOrder = winningOrderMap.get(`${row},${col}`);
+                      const isWinningCell = winOrder !== undefined;
                       const isDimmed =
                         result.winner !== null &&
                         result.winner !== "draw" &&
@@ -823,8 +931,10 @@ export function Connect4Game() {
                                 pair={pair}
                                 size="board"
                                 isWinning={isWinningCell}
+                                winOrder={winOrder ?? 0}
                                 isDimmed={isDimmed}
                                 isLatest={isLatest}
+                                reducedMotion={prefersReducedMotion}
                               />
                             </motion.div>
                           )}
@@ -833,41 +943,142 @@ export function Connect4Game() {
                     })
                   )}
 
-                  {/* Crisp Geometric Alignment Line on 4-in-a-Row */}
-                  {winningLineCoords && (
-                    <svg
-                      viewBox="0 0 700 600"
-                      preserveAspectRatio="none"
-                      aria-hidden="true"
-                      className="pointer-events-none absolute inset-0 w-full h-full z-30"
-                    >
-                      <motion.line
-                        x1={winningLineCoords.x1}
-                        y1={winningLineCoords.y1}
-                        x2={winningLineCoords.x2}
-                        y2={winningLineCoords.y2}
-                        stroke="var(--sys-color-surface-lowest)"
-                        strokeWidth="12"
-                        strokeLinecap="round"
-                        initial={{ pathLength: 0, opacity: 0 }}
-                        animate={{ pathLength: 1, opacity: 0.85 }}
-                        transition={{ duration: 0.35, ease: "easeOut" }}
-                      />
-                      <motion.line
-                        x1={winningLineCoords.x1}
-                        y1={winningLineCoords.y1}
-                        x2={winningLineCoords.x2}
-                        y2={winningLineCoords.y2}
-                        stroke="var(--sys-color-text-primary)"
-                        strokeWidth="5"
-                        strokeLinecap="round"
-                        strokeDasharray="10 8"
-                        initial={{ pathLength: 0, opacity: 0 }}
-                        animate={{ pathLength: 1, opacity: 1 }}
-                        transition={{ duration: 0.38, ease: "easeOut" }}
-                      />
-                    </svg>
-                  )}
+                  {/* Choreographed Geometric Alignment Line & Monochrome Flourish on 4-in-a-Row */}
+                  <AnimatePresence>
+                    {winningLineCoords && (
+                      <motion.svg
+                        key={`win-line-${matchNonce}`}
+                        viewBox="0 0 700 600"
+                        preserveAspectRatio="none"
+                        aria-hidden="true"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="pointer-events-none absolute inset-0 w-full h-full z-30 overflow-visible"
+                      >
+                        {/* Soft contrast halo rail */}
+                        <motion.line
+                          x1={winningLineCoords.x1}
+                          y1={winningLineCoords.y1}
+                          x2={winningLineCoords.x2}
+                          y2={winningLineCoords.y2}
+                          stroke="var(--sys-color-surface-lowest)"
+                          strokeWidth="13"
+                          strokeLinecap="round"
+                          initial={{
+                            pathLength: prefersReducedMotion ? 1 : 0,
+                            opacity: 0,
+                          }}
+                          animate={{ pathLength: 1, opacity: 0.88 }}
+                          transition={{
+                            duration: prefersReducedMotion ? 0.01 : 0.44,
+                            delay: prefersReducedMotion ? 0 : 0.16,
+                            ease: [0.16, 1, 0.3, 1],
+                          }}
+                        />
+
+                        {/* Primary dashed architectural line */}
+                        <motion.line
+                          x1={winningLineCoords.x1}
+                          y1={winningLineCoords.y1}
+                          x2={winningLineCoords.x2}
+                          y2={winningLineCoords.y2}
+                          stroke="var(--sys-color-text-primary)"
+                          strokeWidth="5"
+                          strokeLinecap="round"
+                          strokeDasharray="11 9"
+                          initial={{
+                            pathLength: prefersReducedMotion ? 1 : 0,
+                            opacity: 0,
+                          }}
+                          animate={{ pathLength: 1, opacity: 1 }}
+                          transition={{
+                            duration: prefersReducedMotion ? 0.01 : 0.46,
+                            delay: prefersReducedMotion ? 0 : 0.18,
+                            ease: [0.16, 1, 0.3, 1],
+                          }}
+                        />
+
+                        {/* Staggered anchor rings blooming at each winning disc centre */}
+                        {winningLineCoords.nodes.map((node, idx) => (
+                          <motion.circle
+                            key={`win-node-${idx}`}
+                            cx={node.x}
+                            cy={node.y}
+                            r="9"
+                            fill="var(--sys-color-surface-lowest)"
+                            stroke="var(--sys-color-text-primary)"
+                            strokeWidth="3.5"
+                            initial={{
+                              scale: prefersReducedMotion ? 1 : 0,
+                              opacity: 0,
+                            }}
+                            animate={{
+                              scale: prefersReducedMotion ? 1 : [0, 1.25, 1],
+                              opacity: 1,
+                            }}
+                            transition={{
+                              duration: prefersReducedMotion ? 0.01 : 0.34,
+                              delay: prefersReducedMotion
+                                ? 0
+                                : 0.2 + idx * 0.095,
+                              ease: [0.22, 1, 0.36, 1],
+                            }}
+                            style={{
+                              transformBox: "fill-box",
+                              transformOrigin: "center",
+                            }}
+                          />
+                        ))}
+
+                        {/* Subtle restrained monochrome celebration ticks radiating from midpoint */}
+                        {!prefersReducedMotion &&
+                          [
+                            { dx: -46, dy: -38, r: 4.5, hollow: false },
+                            { dx: 52, dy: -32, r: 5.5, hollow: true },
+                            { dx: -56, dy: 24, r: 5, hollow: true },
+                            { dx: 48, dy: 34, r: 4, hollow: false },
+                            { dx: 6, dy: -52, r: 4, hollow: false },
+                            { dx: -10, dy: 50, r: 5, hollow: true },
+                          ].map((spark, idx) => (
+                            <motion.circle
+                              key={`flourish-${idx}`}
+                              cx={winningLineCoords.midX}
+                              cy={winningLineCoords.midY}
+                              r={spark.r}
+                              fill={
+                                spark.hollow
+                                  ? "var(--sys-color-surface-lowest)"
+                                  : "var(--sys-color-text-primary)"
+                              }
+                              stroke="var(--sys-color-text-primary)"
+                              strokeWidth={spark.hollow ? 2.5 : 0}
+                              initial={{
+                                x: 0,
+                                y: 0,
+                                scale: 0.3,
+                                opacity: 0,
+                              }}
+                              animate={{
+                                x: spark.dx,
+                                y: spark.dy,
+                                scale: [0.3, 1.05, 0.65],
+                                opacity: [0, 0.85, 0],
+                              }}
+                              transition={{
+                                duration: 0.82,
+                                delay: 0.34 + idx * 0.035,
+                                ease: [0.16, 1, 0.3, 1],
+                              }}
+                              style={{
+                                transformBox: "fill-box",
+                                transformOrigin: "center",
+                              }}
+                            />
+                          ))}
+                      </motion.svg>
+                    )}
+                  </AnimatePresence>
                 </div>
 
                 {/* Column Numbers Rail (Desktop Keyboard Cue) */}
@@ -897,7 +1108,7 @@ export function Connect4Game() {
               />
             </div>
 
-            {/* Post-Match Outcome Strip (Appears cleanly below the board so winning line stays visible) */}
+            {/* Post-Match Outcome Strip (Sequenced smoothly after the winning line highlight) */}
             <AnimatePresence>
               {isFinished && (
                 <motion.section
@@ -905,13 +1116,34 @@ export function Connect4Game() {
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: 8 }}
-                  transition={{ duration: 0.24, ease: "easeOut" }}
+                  transition={{
+                    duration: prefersReducedMotion ? 0.01 : 0.28,
+                    delay:
+                      prefersReducedMotion || result.winner === "draw"
+                        ? 0
+                        : 0.45,
+                    ease: [0.16, 1, 0.3, 1],
+                  }}
                   className="mt-6 w-full max-w-[540px] tonal-card p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
                 >
                   <div className="flex items-start gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-[var(--sys-color-surface-low)] border border-[var(--sys-color-border-subtle)] flex items-center justify-center shrink-0 text-[var(--sys-color-text-primary)]">
+                    <motion.div
+                      initial={{ scale: prefersReducedMotion ? 1 : 0.72 }}
+                      animate={{
+                        scale: prefersReducedMotion ? 1 : [0.72, 1.1, 1],
+                      }}
+                      transition={{
+                        duration: prefersReducedMotion ? 0.01 : 0.42,
+                        delay:
+                          prefersReducedMotion || result.winner === "draw"
+                            ? 0
+                            : 0.52,
+                        ease: [0.22, 1, 0.36, 1],
+                      }}
+                      className="w-10 h-10 rounded-xl bg-[var(--sys-color-surface-low)] border border-[var(--sys-color-border-subtle)] flex items-center justify-center shrink-0 text-[var(--sys-color-text-primary)]"
+                    >
                       <Trophy className="w-5 h-5" aria-hidden="true" />
-                    </div>
+                    </motion.div>
                     <div>
                       <h2 className="text-base font-semibold text-[var(--sys-color-text-primary)]">
                         {outcomeTitle}
