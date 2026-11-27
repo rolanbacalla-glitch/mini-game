@@ -370,7 +370,10 @@ export function ChromaCalmGame() {
         </div>
 
         {/* 5×5 OKLCH Swatch Matrix */}
-        <div className="w-full max-w-[396px] aspect-square tonal-card-elevated rounded-[24px] p-3.5 sm:p-4 select-none">
+        <div
+          onContextMenu={(e) => e.preventDefault()}
+          className="w-full max-w-[396px] aspect-square tonal-card-elevated rounded-[24px] p-3.5 sm:p-4 select-none game-touch-surface"
+        >
           <div className="grid grid-cols-5 grid-rows-5 gap-2 w-full h-full">
             {board.map((swatch, index) => {
               const isSelected = selectedIdx === index;
@@ -384,6 +387,8 @@ export function ChromaCalmGame() {
                   layout
                   transition={{ type: "spring", stiffness: 380, damping: 30 }}
                   type="button"
+                  draggable={false}
+                  onContextMenu={(e) => e.preventDefault()}
                   onClick={() => handleSwatchClick(index)}
                   aria-label={`Row ${Math.floor(index / CHROMA_GRID_SIZE) + 1}, Column ${(index % CHROMA_GRID_SIZE) + 1}${
                     swatch.locked ? ", pinned anchor corner" : ""

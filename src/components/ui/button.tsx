@@ -28,12 +28,29 @@ const sizeStyles: Record<NonNullable<ButtonProps["size"]>, string> = {
  * with WCAG 2.2 SC 2.5.8 (>= 40px) hit target and SC 2.4.11 focus ring.
  */
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant = "primary", size = "md", type = "button", ...props }, ref) => (
+  (
+    {
+      className,
+      variant = "primary",
+      size = "md",
+      type = "button",
+      onContextMenu,
+      ...props
+    },
+    ref
+  ) => (
     <button
       ref={ref}
       type={type}
+      onContextMenu={(e) => {
+        if (onContextMenu) {
+          onContextMenu(e);
+        } else {
+          e.preventDefault();
+        }
+      }}
       className={cn(
-        "inline-flex items-center justify-center gap-2 font-medium",
+        "inline-flex items-center justify-center gap-2 font-medium whitespace-nowrap select-none touch-manipulation",
         "rounded-[var(--radius-md,12px)] active:rounded-full transition-[border-radius,background-color,opacity] duration-150",
         "disabled:pointer-events-none disabled:opacity-50",
         "forced-colors:border-[ButtonText]",

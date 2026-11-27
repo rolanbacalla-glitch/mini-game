@@ -25,12 +25,12 @@ export const GAMES: GameMeta[] = [
   {
     id: "daily-pour",
     slug: "/daily-pour",
-    title: "Daily Pour",
-    subtitle: "Grind, bloom, and pour a steady spiral to unlock your daily tasting card.",
-    duration: "2 mins",
+    title: "Daily Four",
+    subtitle: "Drop engraved symbol discs to connect four in a row — built without relying on colour.",
+    duration: "2–3 mins",
     status: "live",
     statusLabel: "Play today's ritual",
-    restorativeBenefit: "Rhythmic motor focus with soothing procedural kettle audio.",
+    restorativeBenefit: "Calm tactical pattern reading through pure silhouette and tactile contrast.",
     accentColour: "var(--tile-terracotta-fill)",
   },
   {

@@ -237,6 +237,57 @@ class SoundEngine {
     clickOsc.stop(now + 0.04);
   }
 
+  /** Tactile weighted-token drop clack with subtle wooden double-bounce */
+  public playTokenDrop(row: number = 5): void {
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    // Deeper drops sound slightly lower and more resonant
+    const baseFreq = 250 + (5 - Math.min(5, Math.max(0, row))) * 26;
+
+    const triggerClack = (offset: number, volume: number, freqScale: number) => {
+      const start = now + offset;
+      const body = ctx.createOscillator();
+      const bodyGain = ctx.createGain();
+      body.type = "triangle";
+      body.frequency.setValueAtTime(baseFreq * freqScale, start);
+      body.frequency.exponentialRampToValueAtTime(
+        Math.max(95, baseFreq * 0.45 * freqScale),
+        start + 0.055
+      );
+
+      bodyGain.gain.setValueAtTime(0.001, start);
+      bodyGain.gain.linearRampToValueAtTime(volume, start + 0.004);
+      bodyGain.gain.exponentialRampToValueAtTime(0.001, start + 0.068);
+
+      body.connect(bodyGain);
+      bodyGain.connect(ctx.destination);
+      body.start(start);
+      body.stop(start + 0.075);
+
+      const rim = ctx.createOscillator();
+      const rimGain = ctx.createGain();
+      rim.type = "sine";
+      rim.frequency.setValueAtTime(baseFreq * 2.8 * freqScale, start);
+      rim.frequency.exponentialRampToValueAtTime(
+        baseFreq * 1.6 * freqScale,
+        start + 0.025
+      );
+
+      rimGain.gain.setValueAtTime(0.001, start);
+      rimGain.gain.linearRampToValueAtTime(volume * 0.35, start + 0.002);
+      rimGain.gain.exponentialRampToValueAtTime(0.001, start + 0.03);
+
+      rim.connect(rimGain);
+      rimGain.connect(ctx.destination);
+      rim.start(start);
+      rim.stop(start + 0.035);
+    };
+
+    triggerClack(0, 0.14, 1.0);
+    triggerClack(0.068, 0.06, 1.08);
+  }
+
   /** Resonant harmonic chime when an eyelet latches onto its matching peg */
   public playLatch(): void {
     const ctx = this.ensureContext();

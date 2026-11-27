@@ -150,9 +150,26 @@ html,
 body {
   background-color: var(--sys-color-surface-canvas);
   color: var(--sys-color-text-primary);
+  -webkit-tap-highlight-color: transparent;
   transition:
     background-color 200ms var(--ease-effects-smooth),
     color 200ms var(--ease-effects-smooth);
+}
+
+/* Mobile-safe game surface: suppresses Android/iOS long-press pop-out menus,
+   accidental text selection, image drag ghosts, and double-tap zoom. */
+.game-touch-surface,
+.game-touch-surface * {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-drag: none;
+}
+
+.game-touch-surface {
+  touch-action: manipulation;
+  overscroll-behavior: contain;
 }
 
 @media (prefers-reduced-motion: reduce) {

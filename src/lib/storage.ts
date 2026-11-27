@@ -229,6 +229,119 @@ export function recordPourZenCompletion(): PourStats {
   return nextStats;
 }
 
+/* ---------- Daily Four (Symbol Connect 4) Persistence ---------- */
+export interface DailyFourCompletionRecord {
+  dateKey: string;
+  outcome: "win" | "draw";
+  moves: number;
+  elapsedSeconds: number;
+  emblemPairId: string;
+  shareText: string;
+  completedAt: string;
+}
+
+export interface DailyFourStats {
+  currentStreak: number;
+  bestStreak: number;
+  totalDailySolved: number;
+  totalZenPlayed: number;
+  lastCompletedDate: string | null;
+  history: Record<string, DailyFourCompletionRecord>;
+}
+
+const DAILY_FOUR_STATS_KEY = "coffee-break:daily-four:stats:v1";
+
+const DEFAULT_DAILY_FOUR_STATS: DailyFourStats = {
+  currentStreak: 0,
+  bestStreak: 0,
+  totalDailySolved: 0,
+  totalZenPlayed: 0,
+  lastCompletedDate: null,
+  history: {},
+};
+
+export function loadDailyFourStats(): DailyFourStats {
+  if (typeof window === "undefined") return DEFAULT_DAILY_FOUR_STATS;
+  try {
+    const raw = window.localStorage.getItem(DAILY_FOUR_STATS_KEY);
+    if (!raw) return DEFAULT_DAILY_FOUR_STATS;
+    const parsed = JSON.parse(raw) as Partial<DailyFourStats>;
+    return {
+      ...DEFAULT_DAILY_FOUR_STATS,
+      ...parsed,
+      history: parsed.history ?? {},
+    };
+  } catch {
+    return DEFAULT_DAILY_FOUR_STATS;
+  }
+}
+
+export function recordDailyFourDailyCompletion(
+  record: DailyFourCompletionRecord
+): DailyFourStats {
+  const stats = loadDailyFourStats();
+  const alreadySolved = Boolean(stats.history[record.dateKey]);
+  const updatedHistory = {
+    ...stats.history,
+    [record.dateKey]: record,
+  };
+
+  let currentStreak = stats.currentStreak;
+  let totalDailySolved = stats.totalDailySolved;
+
+  if (!alreadySolved) {
+    totalDailySolved += 1;
+    const yesterday = getPreviousDateKey(record.dateKey);
+    if (stats.lastCompletedDate === yesterday) {
+      currentStreak = stats.currentStreak + 1;
+    } else if (stats.lastCompletedDate === record.dateKey) {
+      currentStreak = Math.max(1, stats.currentStreak);
+    } else {
+      currentStreak = 1;
+    }
+  }
+
+  const nextStats: DailyFourStats = {
+    ...stats,
+    currentStreak,
+    bestStreak: Math.max(stats.bestStreak, currentStreak),
+    totalDailySolved,
+    lastCompletedDate: record.dateKey,
+    history: updatedHistory,
+  };
+
+  if (typeof window !== "undefined") {
+    try {
+      window.localStorage.setItem(
+        DAILY_FOUR_STATS_KEY,
+        JSON.stringify(nextStats)
+      );
+    } catch {
+      // Ignore storage quota errors
+    }
+  }
+  return nextStats;
+}
+
+export function recordDailyFourZenCompletion(): DailyFourStats {
+  const stats = loadDailyFourStats();
+  const nextStats: DailyFourStats = {
+    ...stats,
+    totalZenPlayed: stats.totalZenPlayed + 1,
+  };
+  if (typeof window !== "undefined") {
+    try {
+      window.localStorage.setItem(
+        DAILY_FOUR_STATS_KEY,
+        JSON.stringify(nextStats)
+      );
+    } catch {
+      // Ignore storage quota errors
+    }
+  }
+  return nextStats;
+}
+
 /* ---------- Chroma Calm Persistence ---------- */
 export interface ChromaCompletionRecord {
   dateKey: string;

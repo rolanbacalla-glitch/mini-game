@@ -3,9 +3,9 @@ import type { Metadata } from "next";
 import { DailyPourGame } from "@/components/daily-pour/DailyPourGame";
 
 export const metadata: Metadata = {
-  title: "Daily Pour — Coffee Break",
+  title: "Daily Four — Coffee Break",
   description:
-    "Grind, bloom, and pour a steady spiral to unlock your daily coffee tasting card.",
+    "Drop engraved symbol tokens to align four in a row — tactile Connect 4 built without relying on colour.",
 };
 
 export default function DailyPourPage() {
@@ -13,7 +13,7 @@ export default function DailyPourPage() {
     <Suspense
       fallback={
         <div className="min-h-screen flex items-center justify-center text-sm text-[var(--sys-color-text-muted)]">
-          Warming the kettle…
+          Setting up the board…
         </div>
       }
     >

@@ -625,11 +625,14 @@ export function LoomAndLatchGame() {
 
         {/* 5×5 Tactile Loom Board — Solid Tonal Surface */}
         <div
-          className="w-full max-w-[388px] aspect-square tonal-card-elevated rounded-[24px] p-3.5 sm:p-4 select-none"
+          className="w-full max-w-[388px] aspect-square tonal-card-elevated rounded-[24px] p-3.5 sm:p-4 select-none game-touch-surface"
           onMouseLeave={() => setHoverCell(null)}
           onContextMenu={(e) => {
             e.preventDefault();
-            handleRotateSelected();
+            // Rotate on desktop right-click only; avoid accidental rotate on mobile long-press
+            if (window.matchMedia("(pointer: fine)").matches) {
+              handleRotateSelected();
+            }
           }}
         >
           <div className="grid grid-cols-5 grid-rows-5 gap-2 w-full h-full">
@@ -652,10 +655,15 @@ export function LoomAndLatchGame() {
                   <button
                     key={key}
                     type="button"
+                    draggable={false}
                     aria-label={`Row ${row + 1}, Column ${col + 1}${
                       occupied ? `, occupied by ${occupied.piece.colour.name}` : ""
                     }${peg ? `, ${peg.colour.name} latch peg` : ""}`}
-                    onMouseEnter={() => setHoverCell({ row, col })}
+                    onPointerEnter={(e) => {
+                      if (e.pointerType === "mouse") {
+                        setHoverCell({ row, col });
+                      }
+                    }}
                     onFocus={() => setHoverCell({ row, col })}
                     onClick={() => handleCellClick(row, col)}
                     className="relative rounded-xl border transition-all duration-150 flex items-center justify-center cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sys-color-border-focus)]"
@@ -864,14 +872,15 @@ export function LoomAndLatchGame() {
         {!solved && (
           <section
             aria-label="Available tiles"
-            className="mt-6 w-full tonal-card p-4 sm:p-5"
+            onContextMenu={(e) => e.preventDefault()}
+            className="mt-6 w-full tonal-card p-4 sm:p-5 game-touch-surface"
           >
             <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
               <h2 className="text-xs font-semibold uppercase tracking-wider text-[var(--sys-color-text-muted)]">
                 Tile tray
               </h2>
               <span className="text-xs text-[var(--sys-color-text-muted)]">
-                Tap a selected tile to rotate · click placed tiles to lift
+                Tap a selected tile to rotate · tap placed tiles to lift
               </span>
             </div>
 
@@ -890,6 +899,8 @@ export function LoomAndLatchGame() {
                       key={piece.id}
                       layout
                       type="button"
+                      draggable={false}
+                      onContextMenu={(e) => e.preventDefault()}
                       onClick={() => handleTrayPieceClick(piece.id)}
                       whileHover={{ y: -2 }}
                       whileTap={{ scale: 0.96 }}

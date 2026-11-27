@@ -7,6 +7,8 @@ import {
   ArrowRight,
   CheckCircle2,
   Clock,
+  Coffee,
+  Croissant,
   Flame,
   Sparkles,
 } from "lucide-react";
@@ -27,11 +29,11 @@ import {
 import {
   formatDuration,
   loadChromaStats,
+  loadDailyFourStats,
   loadLoomStats,
-  loadPourStats,
   type ChromaStats,
+  type DailyFourStats,
   type LoomStats,
-  type PourStats,
 } from "@/lib/storage";
 
 function LoomPreviewGraphic() {
@@ -85,22 +87,35 @@ function LoomPreviewGraphic() {
   );
 }
 
-function DailyPourPreviewGraphic() {
+function DailyFourPreviewGraphic() {
+  // 5x4 miniature monochrome symbol Connect 4 grid (1 = smooth ivory Coffee, 2 = grooved charcoal Croissant)
+  const cells: Array<0 | 1 | 2> = [
+    0, 0, 0, 1, 0,
+    0, 0, 1, 2, 0,
+    0, 1, 2, 1, 0,
+    1, 2, 2, 1, 2,
+  ];
+
   return (
-    <div className="w-full h-36 rounded-xl bg-[var(--sys-color-surface-low)] border border-[var(--sys-color-border-subtle)] p-3 flex items-center justify-center opacity-80">
-      <div
-        className="relative w-24 h-24 rounded-full border-2 border-dashed flex items-center justify-center"
-        style={{ borderColor: "var(--tile-terracotta-fill)" }}
-      >
-        <div
-          className="w-16 h-16 rounded-full border-2 flex items-center justify-center"
-          style={{ borderColor: "var(--tile-terracotta-fill)" }}
-        >
+    <div className="w-full h-36 rounded-xl bg-[var(--sys-color-surface-low)] border border-[var(--sys-color-border-subtle)] p-3 flex items-center justify-center">
+      <div className="rounded-xl bg-[var(--sys-color-surface-container)] border border-[var(--sys-color-border-subtle)] p-2 grid grid-cols-5 gap-1.5">
+        {cells.map((v, idx) => (
           <div
-            className="w-8 h-8 rounded-full opacity-40"
-            style={{ backgroundColor: "var(--tile-terracotta-fill)" }}
-          />
-        </div>
+            key={idx}
+            className="w-5 h-5 rounded-full bg-[var(--sys-color-surface-canvas)] flex items-center justify-center"
+          >
+            {v === 1 && (
+              <span className="w-4.5 h-4.5 rounded-full bg-[var(--sys-color-surface-lowest)] border border-[var(--sys-color-text-primary)] text-[var(--sys-color-text-primary)] flex items-center justify-center">
+                <Coffee className="w-2.5 h-2.5" strokeWidth={2.3} aria-hidden="true" />
+              </span>
+            )}
+            {v === 2 && (
+              <span className="w-4.5 h-4.5 rounded-full bg-[var(--sys-color-text-primary)] text-[var(--sys-color-surface-lowest)] flex items-center justify-center">
+                <Croissant className="w-2.5 h-2.5" strokeWidth={2.3} aria-hidden="true" />
+              </span>
+            )}
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -137,7 +152,7 @@ function ChromaCalmPreviewGraphic() {
 
 function GamePreview({ id }: { id: string }) {
   if (id === "loom-and-latch") return <LoomPreviewGraphic />;
-  if (id === "daily-pour") return <DailyPourPreviewGraphic />;
+  if (id === "daily-pour") return <DailyFourPreviewGraphic />;
   return <ChromaCalmPreviewGraphic />;
 }
 
@@ -145,7 +160,7 @@ export function HubClient() {
   const [todayLabel, setTodayLabel] = useState<string>("");
   const [todayKey, setTodayKey] = useState<string>("");
   const [loomStats, setLoomStats] = useState<LoomStats | null>(null);
-  const [pourStats, setPourStats] = useState<PourStats | null>(null);
+  const [fourStats, setFourStats] = useState<DailyFourStats | null>(null);
   const [chromaStats, setChromaStats] = useState<ChromaStats | null>(null);
 
   useEffect(() => {
@@ -153,29 +168,29 @@ export function HubClient() {
     setTodayLabel(formatBritishDate(now));
     setTodayKey(getTodayKey(now));
     setLoomStats(loadLoomStats());
-    setPourStats(loadPourStats());
+    setFourStats(loadDailyFourStats());
     setChromaStats(loadChromaStats());
   }, []);
 
   const todayLoom = todayKey && loomStats ? loomStats.history[todayKey] : undefined;
-  const todayPour = todayKey && pourStats ? pourStats.history[todayKey] : undefined;
+  const todayFour = todayKey && fourStats ? fourStats.history[todayKey] : undefined;
   const todayChroma =
     todayKey && chromaStats ? chromaStats.history[todayKey] : undefined;
   const liveGamesCount = GAMES.filter((g) => g.status === "live").length;
   const completedTodayCount =
-    (todayLoom ? 1 : 0) + (todayPour ? 1 : 0) + (todayChroma ? 1 : 0);
+    (todayLoom ? 1 : 0) + (todayFour ? 1 : 0) + (todayChroma ? 1 : 0);
   const topStreak = Math.max(
     loomStats?.currentStreak ?? 0,
-    pourStats?.currentStreak ?? 0,
+    fourStats?.currentStreak ?? 0,
     chromaStats?.currentStreak ?? 0
   );
   const totalDaily =
     (loomStats?.totalDailySolved ?? 0) +
-    (pourStats?.totalDailyBrewed ?? 0) +
+    (fourStats?.totalDailySolved ?? 0) +
     (chromaStats?.totalDailySolved ?? 0);
   const totalZen =
     (loomStats?.totalZenSolved ?? 0) +
-    (pourStats?.totalZenBrewed ?? 0) +
+    (fourStats?.totalZenPlayed ?? 0) +
     (chromaStats?.totalZenSolved ?? 0);
 
   return (
@@ -237,8 +252,8 @@ export function HubClient() {
               const solvedBadgeText =
                 game.id === "loom-and-latch" && todayLoom
                   ? formatDuration(todayLoom.elapsedSeconds)
-                  : game.id === "daily-pour" && todayPour
-                    ? `${todayPour.extractionPct}%`
+                  : game.id === "daily-pour" && todayFour
+                    ? `${todayFour.moves} moves`
                     : game.id === "chroma-calm" && todayChroma
                       ? `${todayChroma.swaps} swaps`
                       : null;

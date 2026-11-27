@@ -1,23 +1,37 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import {
+  Anchor,
+  ArrowDown,
+  Bot,
+  Cat,
   Check,
   Coffee,
   Copy,
-  Droplets,
+  Croissant,
+  Fish,
   Flame,
   HelpCircle,
+  Moon,
   RotateCcw,
-  Shuffle,
-  Sparkles,
+  Star,
+  Sun,
+  Trophy,
+  Undo2,
+  Users,
 } from "lucide-react";
 import { TopBar } from "@/components/TopBar";
 import {
-  Badge,
   Button,
   Dialog,
   DialogClose,
@@ -25,7 +39,6 @@ import {
   DialogDescription,
   DialogTitle,
   DialogTrigger,
-  ProgressBar,
   Tabs,
   TabsList,
   TabsTrigger,
@@ -34,24 +47,154 @@ import {
 } from "@/components/ui";
 import { soundEngine } from "@/lib/audio";
 import {
-  buildPourShareCard,
-  getDailyBean,
-  getExtractionVerdict,
-} from "@/lib/daily-pour/beans";
+  buildConnect4ShareCard,
+  checkBoardResult,
+  chooseBotColumn,
+  COLS,
+  createEmptyBoard,
+  createSeededRng,
+  dropPiece,
+  EMBLEM_PAIRS,
+  getDailyEmblemPair,
+  getDropRow,
+  getEmblemPairById,
+  ROWS,
+  type Board,
+  type Difficulty,
+  type EmblemPair,
+  type EmblemPairId,
+  type EmblemSpec,
+  type MoveRecord,
+  type OpponentMode,
+  type Player,
+} from "@/lib/daily-pour/connect4";
 import { formatShortBritishDate, getTodayKey } from "@/lib/games";
 import {
   formatDuration,
-  loadPourStats,
-  recordPourDailyCompletion,
-  recordPourZenCompletion,
-  type PourStats,
+  loadDailyFourStats,
+  recordDailyFourDailyCompletion,
+  recordDailyFourZenCompletion,
+  type DailyFourStats,
 } from "@/lib/storage";
 
 type GameMode = "daily" | "zen";
-type RitualPhase = "grind" | "bloom" | "rest" | "pour" | "complete";
 
-const TARGET_GRAMS = 18;
-const REST_DURATION_SECONDS = 4;
+function EmblemIcon({
+  iconKey,
+  className,
+  strokeWidth = 2.25,
+}: {
+  iconKey: EmblemSpec["iconKey"];
+  className?: string;
+  strokeWidth?: number;
+}) {
+  switch (iconKey) {
+    case "coffee":
+      return <Coffee className={className} strokeWidth={strokeWidth} aria-hidden="true" />;
+    case "croissant":
+      return <Croissant className={className} strokeWidth={strokeWidth} aria-hidden="true" />;
+    case "cat":
+      return <Cat className={className} strokeWidth={strokeWidth} aria-hidden="true" />;
+    case "fish":
+      return <Fish className={className} strokeWidth={strokeWidth} aria-hidden="true" />;
+    case "sun":
+      return <Sun className={className} strokeWidth={strokeWidth} aria-hidden="true" />;
+    case "moon":
+      return <Moon className={className} strokeWidth={strokeWidth} aria-hidden="true" />;
+    case "star":
+      return <Star className={className} strokeWidth={strokeWidth} aria-hidden="true" />;
+    case "anchor":
+      return <Anchor className={className} strokeWidth={strokeWidth} aria-hidden="true" />;
+  }
+}
+
+/**
+ * Pure non-colour tactile token disc:
+ * - Player 1: Smooth raised alabaster/ivory disc with solid outer rim & dark engraved icon.
+ * - Player 2: Matte deep charcoal-ink disc with grooved dashed inner collar & knockout icon.
+ */
+function TactileDisc({
+  player,
+  pair,
+  size = "board",
+  isWinning = false,
+  isDimmed = false,
+  isLatest = false,
+}: {
+  player: Player;
+  pair: EmblemPair;
+  size?: "board" | "preview" | "badge";
+  isWinning?: boolean;
+  isDimmed?: boolean;
+  isLatest?: boolean;
+}) {
+  const spec = player === 1 ? pair.p1 : pair.p2;
+  const isP1 = player === 1;
+
+  const sizeClasses =
+    size === "badge"
+      ? "w-9 h-9"
+      : size === "preview"
+        ? "w-8 h-8 sm:w-9 sm:h-9"
+        : "w-full h-full";
+
+  const iconClasses =
+    size === "badge"
+      ? "w-4 h-4"
+      : size === "preview"
+        ? "w-4 h-4 sm:w-[18px] sm:h-[18px]"
+        : "w-[54%] h-[54%]";
+
+  return (
+    <div
+      className={`relative rounded-full flex items-center justify-center transition-all duration-200 select-none ${sizeClasses} ${
+        isP1
+          ? "bg-[var(--sys-color-surface-lowest)] text-[var(--sys-color-text-primary)] border-2 border-[var(--sys-color-text-primary)] shadow-[inset_0_2px_0_var(--sys-specular-top),0_2px_5px_rgba(0,0,0,0.10)]"
+          : "bg-[var(--sys-color-text-primary)] text-[var(--sys-color-surface-lowest)] border-2 border-[var(--sys-color-text-primary)] shadow-[inset_0_2px_4px_rgba(0,0,0,0.22),0_2px_5px_rgba(0,0,0,0.12)]"
+      } ${isWinning ? "ring-2 ring-offset-2 ring-[var(--sys-color-text-primary)] ring-offset-[var(--sys-color-surface-container)] scale-[1.04] z-20" : ""} ${
+        isDimmed ? "opacity-40" : "opacity-100"
+      }`}
+    >
+      {/* Player 1 tactile smooth inner bevel ring */}
+      {isP1 && size === "board" && (
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-[3px] rounded-full border border-[var(--sys-color-text-primary)]/18"
+        />
+      )}
+
+      {/* Player 2 tactile grooved dashed collar — unmistakable without colour */}
+      {!isP1 && (
+        <span
+          aria-hidden="true"
+          className={`pointer-events-none absolute rounded-full border-dashed border-[var(--sys-color-surface-lowest)]/55 ${
+            size === "badge"
+              ? "inset-[3px] border"
+              : "inset-[3px] sm:inset-[4px] border-[1.5px]"
+          }`}
+        />
+      )}
+
+      <EmblemIcon
+        iconKey={spec.iconKey}
+        className={`relative z-10 ${iconClasses}`}
+        strokeWidth={size === "badge" ? 2.2 : 2.35}
+      />
+
+      {/* Subtle latest-move corner notch indicator */}
+      {isLatest && !isWinning && size === "board" && (
+        <span
+          aria-hidden="true"
+          className={`pointer-events-none absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 ${
+            isP1
+              ? "bg-[var(--sys-color-text-primary)] border-[var(--sys-color-surface-container)]"
+              : "bg-[var(--sys-color-surface-lowest)] border-[var(--sys-color-text-primary)]"
+          }`}
+        />
+      )}
+    </div>
+  );
+}
 
 export function DailyPourGame() {
   const searchParams = useSearchParams();
@@ -60,36 +203,53 @@ export function DailyPourGame() {
 
   const [mode, setMode] = useState<GameMode>(initialMode);
   const [todayKey] = useState<string>(() => getTodayKey());
-  const [zenCounter, setZenCounter] = useState<number>(1);
+  const dailyPair = useMemo(() => getDailyEmblemPair(todayKey), [todayKey]);
 
-  const seed = mode === "daily" ? todayKey : `zen-${todayKey}-${zenCounter}`;
-  const bean = useMemo(() => getDailyBean(seed), [seed]);
+  const [emblemPairId, setEmblemPairId] = useState<EmblemPairId>(dailyPair.id);
+  const pair = useMemo(() => getEmblemPairById(emblemPairId), [emblemPairId]);
 
-  const [phase, setPhase] = useState<RitualPhase>("grind");
-  const [gramsGround, setGramsGround] = useState<number>(0);
-  const [grinderAngle, setGrinderAngle] = useState<number>(0);
-  const [isGrinding, setIsGrinding] = useState<boolean>(false);
+  const [opponentMode, setOpponentMode] = useState<OpponentMode>("bot");
+  const [difficulty, setDifficulty] = useState<Difficulty>("clever");
 
-  const [waterMl, setWaterMl] = useState<number>(0);
-  const [restRemaining, setRestRemaining] = useState<number>(REST_DURATION_SECONDS);
-  const [isPouring, setIsPouring] = useState<boolean>(false);
-  const [pointerPos, setPointerPos] = useState<{ x: number; y: number }>({
-    x: 140,
-    y: 140,
-  });
-  const [guideAngle, setGuideAngle] = useState<number>(0);
-  const [inSweetSpot, setInSweetSpot] = useState<boolean>(true);
-
-  const steadyTicksRef = useRef<number>(0);
-  const totalPourTicksRef = useRef<number>(0);
-  const [extractionPct, setExtractionPct] = useState<number>(94);
+  const [board, setBoard] = useState<Board>(() => createEmptyBoard());
+  const [currentPlayer, setCurrentPlayer] = useState<Player>(1);
+  const [history, setHistory] = useState<MoveRecord[]>([]);
+  const [hoveredCol, setHoveredCol] = useState<number | null>(null);
+  const [keyboardCol, setKeyboardCol] = useState<number>(3);
+  const [usingKeyboard, setUsingKeyboard] = useState<boolean>(false);
+  const [botThinking, setBotThinking] = useState<boolean>(false);
 
   const [elapsedSeconds, setElapsedSeconds] = useState<number>(0);
+  const [matchNonce, setMatchNonce] = useState<number>(1);
   const [copied, setCopied] = useState<boolean>(false);
-  const [stats, setStats] = useState<PourStats | null>(null);
+  const [stats, setStats] = useState<DailyFourStats | null>(null);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
 
-  const svgRef = useRef<SVGSVGElement | null>(null);
+  const recordedMatchRef = useRef<number>(0);
+
+  const activeOpponent: OpponentMode = mode === "daily" ? "bot" : opponentMode;
+  const activeDifficulty: Difficulty = mode === "daily" ? "clever" : difficulty;
+
+  const result = useMemo(() => checkBoardResult(board), [board]);
+  const isFinished = result.winner !== null;
+  const lastMove = history.length > 0 ? history[history.length - 1] : null;
+
+  const winningSet = useMemo(() => {
+    const set = new Set<string>();
+    for (const [r, c] of result.winningCells) {
+      set.add(`${r},${c}`);
+    }
+    return set;
+  }, [result.winningCells]);
+
+  const p1Count = useMemo(
+    () => history.filter((m) => m.player === 1).length,
+    [history]
+  );
+  const p2Count = useMemo(
+    () => history.filter((m) => m.player === 2).length,
+    [history]
+  );
 
   const pushToast = useCallback(
     (title: string, description?: string, tone: ToastItem["tone"] = "info") => {
@@ -113,343 +273,395 @@ export function DailyPourGame() {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
-  const resetRitual = useCallback(() => {
-    soundEngine.stopPourSound();
-    setPhase("grind");
-    setGramsGround(0);
-    setGrinderAngle(0);
-    setIsGrinding(false);
-    setWaterMl(0);
-    setRestRemaining(REST_DURATION_SECONDS);
-    setIsPouring(false);
-    setPointerPos({ x: 140, y: 140 });
-    setGuideAngle(0);
-    setInSweetSpot(true);
-    steadyTicksRef.current = 0;
-    totalPourTicksRef.current = 0;
-    setExtractionPct(94);
+  const resetBoard = useCallback((playAudio = false) => {
+    if (playAudio) soundEngine.playClear();
+    setBoard(createEmptyBoard());
+    setCurrentPlayer(1);
+    setHistory([]);
+    setHoveredCol(null);
+    setBotThinking(false);
     setElapsedSeconds(0);
     setCopied(false);
+    setMatchNonce((n) => n + 1);
   }, []);
 
+  // Load persisted Daily Four stats on mount
   useEffect(() => {
-    resetRitual();
-  }, [bean, resetRitual]);
-
-  useEffect(() => {
-    setStats(loadPourStats());
-    return () => {
-      soundEngine.stopPourSound();
-    };
+    setStats(loadDailyFourStats());
   }, []);
 
-  // Elapsed timer (Daily mode, paused once complete)
+  // Reset board cleanly when switching between Daily and Free Play
   useEffect(() => {
-    if (mode !== "daily" || phase === "complete") return;
+    resetBoard(false);
+  }, [mode, resetBoard]);
+
+  // Gentle elapsed timer (pauses once match ends)
+  useEffect(() => {
+    if (isFinished) return;
     const timer = window.setInterval(() => {
       setElapsedSeconds((s) => s + 1);
     }, 1000);
     return () => window.clearInterval(timer);
-  }, [mode, phase]);
+  }, [isFinished, matchNonce]);
 
-  // Step 1: Grind loop
-  useEffect(() => {
-    if (phase !== "grind" || !isGrinding) return;
-    let tickCount = 0;
-    const interval = window.setInterval(() => {
-      tickCount++;
-      if (tickCount % 2 === 0) {
-        soundEngine.playGrindTick();
+  const commitMove = useCallback(
+    (col: number, player: Player) => {
+      const dropped = dropPiece(board, col, player);
+      if (!dropped) {
+        soundEngine.playInvalid();
+        return;
       }
-      setGrinderAngle((a) => (a + 18) % 360);
-      setGramsGround((g) => {
-        const next = Math.min(TARGET_GRAMS, +(g + 0.55).toFixed(2));
-        if (next >= TARGET_GRAMS) {
-          setIsGrinding(false);
-          soundEngine.playLatch();
-          setPhase("bloom");
-        }
-        return next;
-      });
-    }, 60);
-    return () => window.clearInterval(interval);
-  }, [phase, isGrinding]);
 
-  // Step 2b: Gentle CO2 bloom rest countdown
-  useEffect(() => {
-    if (phase !== "rest") return;
-    soundEngine.stopPourSound();
-    const interval = window.setInterval(() => {
-      setRestRemaining((r) => {
-        if (r <= 1) {
-          soundEngine.playLatch();
-          setPhase("pour");
-          return 0;
-        }
-        return r - 1;
-      });
-    }, 1000);
-    return () => window.clearInterval(interval);
-  }, [phase]);
+      const { board: nextBoard, row } = dropped;
+      const nextHistory = [...history, { row, col, player }];
+      const nextResult = checkBoardResult(nextBoard);
 
-  // Compute current spiral guide target coordinates (SVG 280x280, centre 140,140)
-  const guidePoint = useMemo(() => {
-    if (phase === "bloom") {
-      return { x: 140, y: 140, radius: 42 };
-    }
-    const progress = Math.max(
-      0,
-      Math.min(1, (waterMl - bean.bloomMl) / (bean.targetMl - bean.bloomMl))
-    );
-    const orbitRadius = 26 + Math.sin(progress * Math.PI * 2) * 26 + 18;
-    const x = 140 + Math.cos(guideAngle) * orbitRadius;
-    const y = 140 + Math.sin(guideAngle) * orbitRadius;
-    return { x, y, radius: 34 };
-  }, [bean.bloomMl, bean.targetMl, guideAngle, phase, waterMl]);
+      setBoard(nextBoard);
+      setHistory(nextHistory);
 
-  // Step 2 & Step 3: Pouring water loop
-  useEffect(() => {
-    if ((phase !== "bloom" && phase !== "pour") || !isPouring) {
-      soundEngine.stopPourSound();
-      return;
-    }
-
-    const interval = window.setInterval(() => {
-      setGuideAngle((a) => a + 0.085);
-
-      const dx = pointerPos.x - guidePoint.x;
-      const dy = pointerPos.y - guidePoint.y;
-      const dist = Math.hypot(dx, dy);
-      const sweet = dist <= guidePoint.radius + 14;
-      setInSweetSpot(sweet);
-
-      totalPourTicksRef.current += 1;
-      if (sweet) steadyTicksRef.current += 1;
-
-      const flowRate = sweet ? 1.85 : 1.35;
-
-      setWaterMl((ml) => {
-        const nextMl = +(ml + flowRate).toFixed(1);
-        soundEngine.startPourSound(nextMl / bean.targetMl);
-
-        if (phase === "bloom" && nextMl >= bean.bloomMl) {
-          setIsPouring(false);
-          soundEngine.stopPourSound();
-          soundEngine.playSnap();
-          setRestRemaining(REST_DURATION_SECONDS);
-          setPhase("rest");
-          return bean.bloomMl;
-        }
-
-        if (phase === "pour" && nextMl >= bean.targetMl) {
-          setIsPouring(false);
-          soundEngine.stopPourSound();
+      if (nextResult.winner !== null) {
+        if (
+          nextResult.winner === 1 ||
+          (activeOpponent === "local" && nextResult.winner === 2)
+        ) {
           soundEngine.playComplete();
-
-          const ratio =
-            totalPourTicksRef.current > 0
-              ? steadyTicksRef.current / totalPourTicksRef.current
-              : 0.9;
-          const finalScore = Math.max(
-            82,
-            Math.min(99, Math.round(82 + ratio * 17))
-          );
-          setExtractionPct(finalScore);
-          setPhase("complete");
-
-          if (mode === "daily") {
-            const shareText = buildPourShareCard(
-              bean,
-              formatShortBritishDate(todayKey),
-              finalScore,
-              formatDuration(elapsedSeconds)
-            );
-            const updated = recordPourDailyCompletion({
-              dateKey: todayKey,
-              beanName: bean.name,
-              extractionPct: finalScore,
-              elapsedSeconds,
-              shareText,
-              completedAt: new Date().toISOString(),
-            });
-            setStats(updated);
-            pushToast(
-              "Tasting card unlocked",
-              `${bean.name} · ${finalScore}% extraction.`,
-              "success"
-            );
-          } else {
-            const updated = recordPourZenCompletion();
-            setStats(updated);
-            pushToast(
-              "Zen brew complete",
-              `${bean.name} · ${finalScore}% extraction.`,
-              "success"
-            );
-          }
-          return bean.targetMl;
+        } else if (nextResult.winner === "draw") {
+          soundEngine.playLatch();
+        } else {
+          soundEngine.playTokenDrop(row);
         }
+      } else {
+        soundEngine.playTokenDrop(row);
+        setCurrentPlayer(player === 1 ? 2 : 1);
+      }
+    },
+    [activeOpponent, board, history]
+  );
 
-        return nextMl;
-      });
-    }, 55);
+  // Persist stats when a match finishes
+  useEffect(() => {
+    if (!isFinished || recordedMatchRef.current === matchNonce) return;
+    recordedMatchRef.current = matchNonce;
 
-    return () => window.clearInterval(interval);
+    const totalMoves = history.length;
+
+    if (mode === "daily") {
+      if (result.winner === 1 || result.winner === "draw") {
+        const outcome = result.winner === 1 ? "win" : "draw";
+        const outcomeLabel =
+          outcome === "win"
+            ? `Won with ${pair.p1.name}`
+            : "Honourable draw";
+        const shareText = buildConnect4ShareCard({
+          dateLabel: formatShortBritishDate(todayKey),
+          pair,
+          board,
+          winningCells: result.winningCells,
+          outcomeLabel,
+          moves: totalMoves,
+          durationLabel: formatDuration(elapsedSeconds),
+        });
+
+        const updated = recordDailyFourDailyCompletion({
+          dateKey: todayKey,
+          outcome,
+          moves: totalMoves,
+          elapsedSeconds,
+          emblemPairId: pair.id,
+          shareText,
+          completedAt: new Date().toISOString(),
+        });
+        setStats(updated);
+        pushToast(
+          outcome === "win" ? "Daily match won" : "Daily match drawn",
+          `${totalMoves} moves · ${formatDuration(elapsedSeconds)}.`,
+          "success"
+        );
+      }
+    } else {
+      const updated = recordDailyFourZenCompletion();
+      setStats(updated);
+    }
   }, [
-    bean,
+    board,
     elapsedSeconds,
-    guidePoint.radius,
-    guidePoint.x,
-    guidePoint.y,
-    isPouring,
+    history.length,
+    isFinished,
+    matchNonce,
     mode,
-    phase,
-    pointerPos.x,
-    pointerPos.y,
+    pair,
     pushToast,
+    result.winner,
+    result.winningCells,
     todayKey,
   ]);
 
-  // Keyboard support: hold Spacebar to grind or pour (auto-tracking guide ring for accessibility!)
+  // Bot turn execution with realistic, calm pause
+  useEffect(() => {
+    if (activeOpponent !== "bot" || currentPlayer !== 2 || isFinished) {
+      setBotThinking(false);
+      return;
+    }
+
+    setBotThinking(true);
+    const delayMs = 420;
+    const timer = window.setTimeout(() => {
+      const rng =
+        mode === "daily"
+          ? createSeededRng(`daily-four::${todayKey}::m${history.length}::n${matchNonce}`)
+          : Math.random;
+      const botCol = chooseBotColumn(board, 2, activeDifficulty, rng);
+      setBotThinking(false);
+      if (botCol !== -1) {
+        commitMove(botCol, 2);
+      }
+    }, delayMs);
+
+    return () => window.clearTimeout(timer);
+  }, [
+    activeDifficulty,
+    activeOpponent,
+    board,
+    commitMove,
+    currentPlayer,
+    history.length,
+    isFinished,
+    matchNonce,
+    mode,
+    todayKey,
+  ]);
+
+  const canHumanDrop =
+    !isFinished && !botThinking && (activeOpponent === "local" || currentPlayer === 1);
+
+  const handleColumnSelect = useCallback(
+    (col: number) => {
+      if (!canHumanDrop) return;
+      if (getDropRow(board, col) === -1) {
+        soundEngine.playInvalid();
+        return;
+      }
+      commitMove(col, currentPlayer);
+    },
+    [board, canHumanDrop, commitMove, currentPlayer]
+  );
+
+  // Keyboard accessibility: 1–7 to drop directly, Left/Right arrows + Enter/Space
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.code !== "Space" || e.repeat) return;
-      if (phase === "grind") {
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement ||
+        e.target instanceof HTMLButtonElement
+      ) {
+        return;
+      }
+      if (!canHumanDrop) return;
+
+      if (e.key >= "1" && e.key <= "7") {
         e.preventDefault();
-        setIsGrinding(true);
-      } else if (phase === "bloom" || phase === "pour") {
+        const col = Number(e.key) - 1;
+        setUsingKeyboard(true);
+        setKeyboardCol(col);
+        handleColumnSelect(col);
+      } else if (e.key === "ArrowLeft") {
         e.preventDefault();
-        setPointerPos({ x: guidePoint.x, y: guidePoint.y });
-        setIsPouring(true);
+        setUsingKeyboard(true);
+        setKeyboardCol((c) => (c - 1 + COLS) % COLS);
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        setUsingKeyboard(true);
+        setKeyboardCol((c) => (c + 1) % COLS);
+      } else if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        setUsingKeyboard(true);
+        handleColumnSelect(keyboardCol);
       }
     };
-    const onKeyUp = (e: KeyboardEvent) => {
-      if (e.code !== "Space") return;
-      setIsGrinding(false);
-      setIsPouring(false);
-    };
-    window.addEventListener("keydown", onKeyDown);
-    window.addEventListener("keyup", onKeyUp);
-    return () => {
-      window.removeEventListener("keydown", onKeyDown);
-      window.removeEventListener("keyup", onKeyUp);
-    };
-  }, [guidePoint.x, guidePoint.y, phase]);
 
-  const updatePointerFromEvent = (e: React.PointerEvent<SVGSVGElement>) => {
-    const rect = svgRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const scaleX = 280 / rect.width;
-    const scaleY = 280 / rect.height;
-    const x = Math.max(24, Math.min(256, (e.clientX - rect.left) * scaleX));
-    const y = Math.max(24, Math.min(256, (e.clientY - rect.top) * scaleY));
-    setPointerPos({ x, y });
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [canHumanDrop, handleColumnSelect, keyboardCol]);
+
+  const handleUndo = () => {
+    if (history.length === 0 || botThinking) return;
+    // In bot mode, pop back to Player 1's turn (undo bot + player move)
+    let stepsToUndo = 1;
+    if (activeOpponent === "bot") {
+      if (lastMove?.player === 2 && history.length >= 2) {
+        stepsToUndo = 2;
+      } else {
+        stepsToUndo = 1;
+      }
+    }
+
+    const nextHistory = history.slice(0, history.length - stepsToUndo);
+    const rebuilt = createEmptyBoard();
+    for (const move of nextHistory) {
+      rebuilt[move.row][move.col] = move.player;
+    }
+
+    soundEngine.playPickup();
+    setBoard(rebuilt);
+    setHistory(nextHistory);
+    setCurrentPlayer(
+      nextHistory.length === 0
+        ? 1
+        : nextHistory[nextHistory.length - 1].player === 1
+          ? 2
+          : 1
+    );
   };
 
-  const handleCopyTastingCard = async () => {
-    const text = buildPourShareCard(
-      bean,
-      mode === "daily" ? formatShortBritishDate(todayKey) : "Zen Brew",
-      extractionPct,
-      mode === "daily" ? formatDuration(elapsedSeconds) : "Untimed"
-    );
+  const outcomeTitle = useMemo(() => {
+    if (result.winner === "draw") return "Honourable draw.";
+    if (result.winner === 1) {
+      return activeOpponent === "bot"
+        ? `You connected four ${pair.p1.name.toLowerCase()}s.`
+        : `${pair.p1.name} wins!`;
+    }
+    if (result.winner === 2) {
+      return activeOpponent === "bot"
+        ? `Bot connected four ${pair.p2.name.toLowerCase()}s.`
+        : `${pair.p2.name} wins!`;
+    }
+    return "";
+  }, [activeOpponent, pair.p1.name, pair.p2.name, result.winner]);
+
+  const handleCopyShare = async () => {
+    const shareText = buildConnect4ShareCard({
+      dateLabel:
+        mode === "daily" ? formatShortBritishDate(todayKey) : "Free Play",
+      pair,
+      board,
+      winningCells: result.winningCells,
+      outcomeLabel: outcomeTitle.replace(/\.$/, ""),
+      moves: history.length,
+      durationLabel:
+        mode === "daily" ? formatDuration(elapsedSeconds) : "Untimed",
+    });
+
     try {
-      await navigator.clipboard.writeText(text);
+      await navigator.clipboard.writeText(shareText);
       setCopied(true);
       soundEngine.playPickup();
-      pushToast("Tasting card copied", "Ready to share your brew.", "success");
+      pushToast("Symbol grid copied", "Zero-colour board ready to paste.", "success");
       window.setTimeout(() => setCopied(false), 2200);
     } catch {
       pushToast("Copy unavailable", "Clipboard access was blocked.", "warning");
     }
   };
 
-  const overallProgress =
-    phase === "grind"
-      ? (gramsGround / TARGET_GRAMS) * 25
-      : phase === "bloom"
-        ? 25 + (waterMl / bean.bloomMl) * 20
-        : phase === "rest"
-          ? 45 + ((REST_DURATION_SECONDS - restRemaining) / REST_DURATION_SECONDS) * 10
-          : phase === "pour"
-            ? 55 + ((waterMl - bean.bloomMl) / (bean.targetMl - bean.bloomMl)) * 45
-            : 100;
+  const activePreviewCol = canHumanDrop
+    ? hoveredCol !== null
+      ? hoveredCol
+      : usingKeyboard
+        ? keyboardCol
+        : null
+    : null;
+
+  const previewLandingRow =
+    activePreviewCol !== null ? getDropRow(board, activePreviewCol) : -1;
+
+  // Winning line SVG coordinates (0..700 x 0..600)
+  const winningLineCoords = useMemo(() => {
+    if (result.winningCells.length < 4) return null;
+    const first = result.winningCells[0];
+    const last = result.winningCells[result.winningCells.length - 1];
+    return {
+      x1: (first[1] + 0.5) * 100,
+      y1: (first[0] + 0.5) * 100,
+      x2: (last[1] + 0.5) * 100,
+      y2: (last[0] + 0.5) * 100,
+    };
+  }, [result.winningCells]);
+
+  const p1Label = activeOpponent === "bot" ? "You" : "Player 1";
+  const p2Label = activeOpponent === "bot" ? "Barista Bot" : "Player 2";
 
   return (
     <div className="min-h-screen flex flex-col">
-      <TopBar backHref="/" title="Daily Pour" />
+      <TopBar backHref="/" title="Daily Four" />
 
-      <main className="flex-1 w-full max-w-3xl mx-auto px-4 sm:px-6 pt-5 pb-16 flex flex-col items-center">
-        {/* Mode Switcher & Status Badges */}
-        <div className="w-full flex flex-wrap items-center justify-between gap-3 mb-5">
+      <main className="flex-1 w-full max-w-5xl mx-auto px-4 sm:px-6 pt-5 pb-16">
+        {/* Top Mode Bar & Clean Unboxed Metadata */}
+        <div className="w-full flex flex-wrap items-center justify-between gap-3 mb-6">
           <Tabs value={mode} onValueChange={(v) => setMode(v as GameMode)}>
-            <TabsList aria-label="Brew mode">
-              <TabsTrigger value="daily">Daily Ritual</TabsTrigger>
-              <TabsTrigger value="zen">Zen Brew</TabsTrigger>
+            <TabsList aria-label="Game mode">
+              <TabsTrigger value="daily">Daily Match</TabsTrigger>
+              <TabsTrigger value="zen">Free Play</TabsTrigger>
             </TabsList>
           </Tabs>
 
-          <div className="flex flex-wrap items-center gap-2">
-            {mode === "daily" ? (
-              <>
-                <Badge tone="neutral">{formatShortBritishDate(todayKey)}</Badge>
-                <Badge tone="accent" className="font-mono tabular-nums">
-                  {formatDuration(elapsedSeconds)}
-                </Badge>
-                {stats && stats.currentStreak > 0 && (
-                  <Badge tone="success" className="font-mono tabular-nums">
-                    <Flame className="w-3.5 h-3.5" />
-                    {stats.currentStreak}
-                  </Badge>
-                )}
-              </>
-            ) : (
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => {
-                  soundEngine.playPickup();
-                  setZenCounter((n) => n + 1);
-                }}
-              >
-                <Shuffle className="w-3.5 h-3.5" />
-                <span>Different roast</span>
-              </Button>
-            )}
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 text-xs text-[var(--sys-color-text-secondary)]">
+              <span>
+                {mode === "daily" ? formatShortBritishDate(todayKey) : "Untimed"}
+              </span>
+              <span aria-hidden="true">·</span>
+              <span className="font-mono tabular-nums text-[var(--sys-color-text-primary)] font-medium">
+                {formatDuration(elapsedSeconds)}
+              </span>
+              {mode === "daily" && stats && stats.currentStreak > 0 && (
+                <>
+                  <span aria-hidden="true">·</span>
+                  <span className="inline-flex items-center gap-1 font-mono tabular-nums text-[var(--sys-color-feedback-success)] font-medium">
+                    <Flame className="w-3.5 h-3.5" aria-hidden="true" />
+                    {stats.currentStreak}-day streak
+                  </span>
+                </>
+              )}
+            </div>
 
             <Dialog>
               <DialogTrigger asChild>
                 <Button
                   variant="ghost"
                   size="sm"
-                  aria-label="How to play Daily Pour"
-                  className="w-10 px-0"
+                  aria-label="How to play Daily Four"
+                  className="w-10 px-0 shrink-0"
                 >
                   <HelpCircle className="w-4 h-4" />
                 </Button>
               </DialogTrigger>
               <DialogContent>
-                <DialogTitle>How to brew Daily Pour</DialogTitle>
+                <DialogTitle>How to play Daily Four</DialogTitle>
                 <DialogDescription>
-                  A calm three-step pour-over ritual taking roughly 90 seconds.
+                  Classic four-in-a-row designed to work completely without colour.
                 </DialogDescription>
-                <ol className="mt-4 space-y-2.5 text-sm text-[var(--sys-color-text-secondary)] list-decimal pl-5">
+                <ul className="mt-4 space-y-2.5 text-sm text-[var(--sys-color-text-secondary)] list-disc pl-5">
                   <li>
-                    <strong>Grind:</strong> Hold the grinder button (or Spacebar) until
-                    18g of fresh beans are ground.
+                    <strong>Connect four:</strong> Drop engraved discs into any of
+                    the 7 columns to align four matching emblems horizontally,
+                    vertically, or diagonally.
                   </li>
                   <li>
-                    <strong>Bloom:</strong> Press and hold inside the centre ring to pour
-                    45 ml, then pause briefly as the grounds bloom.
+                    <strong>Zero-colour clarity:</strong> Player 1 plays smooth
+                    raised ivory discs; Player 2 plays grooved charcoal discs with
+                    a dashed inner collar — distinct by icon silhouette, luminance,
+                    and rim geometry.
                   </li>
                   <li>
-                    <strong>Spiral Pour:</strong> Follow the drifting target ring smoothly
-                    to 250 ml to unlock today&apos;s tasting card.
+                    <strong>Switch emblems anytime:</strong> Pick Café, Critters,
+                    Celestial, or Tactile icons in the side panel without losing
+                    your board.
                   </li>
-                </ol>
+                  <li>
+                    <strong>Controls:</strong> Tap any column on mobile, click on
+                    desktop, or use keys{" "}
+                    <kbd className="font-mono px-1.5 py-0.5 rounded bg-[var(--sys-color-surface-low)] border border-[var(--sys-color-border-subtle)] text-xs">
+                      1
+                    </kbd>
+                    –
+                    <kbd className="font-mono px-1.5 py-0.5 rounded bg-[var(--sys-color-surface-low)] border border-[var(--sys-color-border-subtle)] text-xs">
+                      7
+                    </kbd>
+                    .
+                  </li>
+                </ul>
                 <div className="mt-6 flex justify-end">
                   <DialogClose asChild>
-                    <Button variant="primary">Start brewing</Button>
+                    <Button variant="primary">Play</Button>
                   </DialogClose>
                 </div>
               </DialogContent>
@@ -457,349 +669,543 @@ export function DailyPourGame() {
           </div>
         </div>
 
-        {/* Bean Origin Strip */}
-        <div className="w-full tonal-card p-4 mb-5 flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2">
-              <Coffee className="w-4 h-4 text-[var(--sys-color-action-primary)]" />
-              <h1 className="text-base font-semibold text-[var(--sys-color-text-primary)]">
-                {bean.name}
-              </h1>
-              <Badge tone="neutral">{bean.roast}</Badge>
-            </div>
-            <p className="mt-1 text-xs text-[var(--sys-color-text-secondary)]">
-              {bean.origin} · {bean.elevation} · {bean.grindLabel} grind ·{" "}
-              <span className="font-mono tabular-nums">{bean.waterTempC}°C</span>
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            {bean.notes.map((note) => (
-              <Badge key={note} tone="accent">
-                {note}
-              </Badge>
-            ))}
-          </div>
-        </div>
-
-        {/* Ritual Progress Bar */}
-        <div className="w-full mb-5">
-          <ProgressBar
-            value={Math.round(overallProgress)}
-            max={100}
-            label={
-              phase === "grind"
-                ? "Step 1 of 3 · Grind fresh beans"
-                : phase === "bloom"
-                  ? "Step 2 of 3 · Saturate for the bloom"
-                  : phase === "rest"
-                    ? "Step 2 of 3 · Resting for CO₂ bloom"
-                    : phase === "pour"
-                      ? "Step 3 of 3 · Steady spiral pour"
-                      : "Ritual complete"
-            }
-          />
-        </div>
-
-        {/* Interactive Stage */}
-        <AnimatePresence mode="wait">
-          {phase === "grind" && (
-            <motion.section
-              key="grind"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              className="w-full max-w-[400px] tonal-card-elevated rounded-[24px] p-6 flex flex-col items-center text-center"
+        {/* Main 2-Column Tabletop Arena */}
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_300px] gap-6 lg:gap-8 items-start">
+          {/* Focal Anchor: Tactile 7x6 Connect 4 Board */}
+          <section
+            aria-label="Connect Four game board"
+            className="flex flex-col items-center w-full"
+          >
+            <div
+              className="w-full max-w-[540px] game-touch-surface"
+              onContextMenu={(e) => e.preventDefault()}
             >
-              <div className="relative w-44 h-44 rounded-full bg-[var(--sys-color-surface-lowest)] border border-[var(--sys-color-border-subtle)] flex items-center justify-center mb-5">
-                <svg viewBox="0 0 160 160" className="w-36 h-36">
-                  <circle
-                    cx="80"
-                    cy="80"
-                    r="62"
-                    fill="none"
-                    stroke="var(--sys-color-border-subtle)"
-                    strokeWidth="6"
-                  />
-                  <circle
-                    cx="80"
-                    cy="80"
-                    r="62"
-                    fill="none"
-                    stroke="var(--tile-terracotta-fill)"
-                    strokeWidth="6"
-                    strokeLinecap="round"
-                    strokeDasharray={2 * Math.PI * 62}
-                    strokeDashoffset={
-                      2 * Math.PI * 62 * (1 - gramsGround / TARGET_GRAMS)
-                    }
-                    transform="rotate(-90 80 80)"
-                  />
-                  <g transform={`rotate(${grinderAngle} 80 80)`}>
-                    <line
-                      x1="80"
-                      y1="80"
-                      x2="122"
-                      y2="80"
-                      stroke="var(--sys-color-text-primary)"
-                      strokeWidth="5"
-                      strokeLinecap="round"
-                    />
-                    <circle
-                      cx="124"
-                      cy="80"
-                      r="9"
-                      fill="var(--tile-terracotta-fill)"
-                    />
-                    <circle
-                      cx="80"
-                      cy="80"
-                      r="10"
-                      fill="var(--sys-color-surface-container)"
-                      stroke="var(--sys-color-text-primary)"
-                      strokeWidth="3"
-                    />
-                  </g>
-                </svg>
-              </div>
-
-              <div className="font-mono text-2xl font-semibold tabular-nums text-[var(--sys-color-text-primary)]">
-                {gramsGround.toFixed(1)}g{" "}
-                <span className="text-sm font-normal text-[var(--sys-color-text-muted)]">
-                  / {TARGET_GRAMS}g
-                </span>
-              </div>
-              <p className="mt-1.5 text-sm text-[var(--sys-color-text-secondary)]">
-                Hold to hand-grind to {bean.grindLabel.toLowerCase()} coarseness.
-              </p>
-
-              <Button
-                variant="primary"
-                size="lg"
-                className="mt-5 w-full select-none"
-                onPointerDown={() => setIsGrinding(true)}
-                onPointerUp={() => setIsGrinding(false)}
-                onPointerLeave={() => setIsGrinding(false)}
-                onPointerCancel={() => setIsGrinding(false)}
+              {/* Overhead Drop Preview Rail */}
+              <div
+                aria-hidden="true"
+                className="grid grid-cols-7 gap-1.5 sm:gap-2.5 px-3 sm:px-4 mb-2 h-10 sm:h-11 items-end"
               >
-                {isGrinding ? "Grinding…" : "Hold to grind (or Space)"}
-              </Button>
-            </motion.section>
-          )}
-
-          {(phase === "bloom" || phase === "rest" || phase === "pour") && (
-            <motion.section
-              key="dripper"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              className="w-full max-w-[420px] tonal-card-elevated rounded-[24px] p-5 flex flex-col items-center"
-            >
-              <div className="w-full flex items-center justify-between mb-3">
-                <Badge tone="neutral" className="font-mono tabular-nums">
-                  <Droplets className="w-3.5 h-3.5" />
-                  {Math.round(waterMl)} /{" "}
-                  {phase === "bloom" ? bean.bloomMl : bean.targetMl} ml
-                </Badge>
-
-                {phase === "rest" ? (
-                  <Badge tone="warning" className="font-mono tabular-nums">
-                    Blooming · {restRemaining}s
-                  </Badge>
-                ) : isPouring ? (
-                  <Badge tone={inSweetSpot ? "success" : "warning"}>
-                    {inSweetSpot ? "Steady sweet spot" : "Guide back to ring"}
-                  </Badge>
-                ) : (
-                  <Badge tone="accent">Hold inside ring to pour</Badge>
-                )}
+                {Array.from({ length: COLS }).map((_, col) => {
+                  const isActive = activePreviewCol === col && previewLandingRow !== -1;
+                  return (
+                    <div
+                      key={col}
+                      className="flex flex-col items-center justify-end h-full"
+                    >
+                      <AnimatePresence>
+                        {isActive && (
+                          <motion.div
+                            key={`preview-${currentPlayer}`}
+                            initial={{ opacity: 0, y: -6, scale: 0.9 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: -4, scale: 0.9 }}
+                            transition={{ duration: 0.14 }}
+                            className="flex flex-col items-center"
+                          >
+                            <TactileDisc
+                              player={currentPlayer}
+                              pair={pair}
+                              size="preview"
+                            />
+                            <ArrowDown className="w-3 h-3 mt-0.5 text-[var(--sys-color-text-muted)]" />
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                  );
+                })}
               </div>
 
-              <svg
-                ref={svgRef}
-                viewBox="0 0 280 280"
-                className="w-full max-w-[280px] aspect-square touch-none select-none cursor-crosshair"
-                onPointerDown={(e) => {
-                  if (phase === "rest") return;
-                  e.currentTarget.setPointerCapture(e.pointerId);
-                  updatePointerFromEvent(e);
-                  setIsPouring(true);
-                }}
-                onPointerMove={(e) => {
-                  updatePointerFromEvent(e);
-                }}
-                onPointerUp={() => setIsPouring(false)}
-                onPointerCancel={() => setIsPouring(false)}
+              {/* Architectural Matte Tabletop Frame */}
+              <div
+                className="relative rounded-[22px] sm:rounded-[26px] bg-[var(--sys-color-surface-container)] border border-[var(--sys-color-border-subtle)] p-2.5 sm:p-4 shadow-[0_14px_34px_-18px_rgba(0,0,0,0.22)]"
+                onMouseLeave={() => setHoveredCol(null)}
               >
-                {/* Ceramic V60 Outer Rim */}
-                <circle
-                  cx="140"
-                  cy="140"
-                  r="128"
-                  fill="var(--sys-color-surface-lowest)"
-                  stroke="var(--sys-color-border-default)"
-                  strokeWidth="3"
-                />
-                {/* Paper Filter Ring */}
-                <circle
-                  cx="140"
-                  cy="140"
-                  r="112"
-                  fill="var(--sys-color-surface-low)"
-                  stroke="var(--sys-color-border-subtle)"
-                  strokeWidth="1.5"
-                />
-                {/* Coffee Grounds Bed (saturates gently as water rises) */}
-                <circle
-                  cx="140"
-                  cy="140"
-                  r={88 + Math.min(14, (waterMl / bean.targetMl) * 14)}
-                  fill="var(--tile-terracotta-stroke)"
-                  opacity={0.28 + Math.min(0.45, (waterMl / bean.targetMl) * 0.45)}
-                />
+                {/* 7x6 Slot Matrix */}
+                <div className="relative grid grid-cols-7 gap-1.5 sm:gap-2.5">
+                  {Array.from({ length: ROWS }).map((_, row) =>
+                    Array.from({ length: COLS }).map((__, col) => {
+                      const cell = board[row][col];
+                      const isColumnHovered = activePreviewCol === col;
+                      const isLandingTarget =
+                        isColumnHovered && previewLandingRow === row && cell === 0;
+                      const isWinningCell = winningSet.has(`${row},${col}`);
+                      const isDimmed =
+                        result.winner !== null &&
+                        result.winner !== "draw" &&
+                        !isWinningCell;
+                      const isLatest =
+                        lastMove !== null &&
+                        lastMove.row === row &&
+                        lastMove.col === col;
+                      const colFull = getDropRow(board, col) === -1;
+                      const dropTargetRow = getDropRow(board, col);
 
-                {/* Bloom Expansion Rings during Rest */}
-                {phase === "rest" && (
-                  <motion.circle
-                    cx="140"
-                    cy="140"
-                    r="46"
-                    fill="none"
-                    stroke="var(--tile-ochre-fill)"
-                    strokeWidth="2.5"
-                    initial={{ r: 30, opacity: 0.85 }}
-                    animate={{ r: 88, opacity: 0.15 }}
-                    transition={{ duration: 1.8, repeat: Infinity }}
-                  />
-                )}
+                      const ownerName =
+                        cell === 1
+                          ? pair.p1.name
+                          : cell === 2
+                            ? pair.p2.name
+                            : "empty";
 
-                {/* Target Spiral Guide Ring */}
-                {phase !== "rest" && (
-                  <g>
-                    <circle
-                      cx={guidePoint.x}
-                      cy={guidePoint.y}
-                      r={guidePoint.radius}
-                      fill="none"
-                      stroke={
-                        isPouring && inSweetSpot
-                          ? "var(--tile-emerald-fill)"
-                          : "var(--tile-terracotta-fill)"
-                      }
-                      strokeWidth="2.5"
-                      strokeDasharray="6 5"
-                    />
-                    <circle
-                      cx={guidePoint.x}
-                      cy={guidePoint.y}
-                      r="5"
-                      fill="var(--tile-terracotta-fill)"
-                    />
-                  </g>
-                )}
+                      return (
+                        <button
+                          key={`${row}-${col}`}
+                          type="button"
+                          draggable={false}
+                          disabled={!canHumanDrop || colFull}
+                          onContextMenu={(e) => e.preventDefault()}
+                          onPointerEnter={(e) => {
+                            if (e.pointerType === "mouse") {
+                              setUsingKeyboard(false);
+                              setHoveredCol(col);
+                            }
+                          }}
+                          onFocus={() => {
+                            setUsingKeyboard(true);
+                            setKeyboardCol(col);
+                          }}
+                          onClick={() => handleColumnSelect(col)}
+                          aria-label={`Column ${col + 1}, Row ${row + 1}, ${ownerName}${
+                            canHumanDrop && !colFull
+                              ? `. Drop ${
+                                  currentPlayer === 1 ? pair.p1.name : pair.p2.name
+                                } in row ${dropTargetRow + 1}`
+                              : ""
+                          }`}
+                          className={`group relative aspect-square min-w-[40px] min-h-[40px] rounded-full p-[3px] sm:p-1 flex items-center justify-center transition-colors duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sys-color-border-focus)] ${
+                            canHumanDrop && !colFull
+                              ? "cursor-pointer"
+                              : "cursor-default"
+                          } ${
+                            isColumnHovered && canHumanDrop && !colFull
+                              ? "bg-[var(--sys-color-bg-surface-active)]"
+                              : "bg-[var(--sys-color-surface-canvas)]"
+                          } shadow-[inset_0_2px_5px_rgba(0,0,0,0.12)]`}
+                        >
+                          {/* Landing target ghost silhouette */}
+                          {isLandingTarget && (
+                            <span
+                              aria-hidden="true"
+                              className="w-full h-full rounded-full border-2 border-dashed border-[var(--sys-color-text-muted)]/60 flex items-center justify-center opacity-45 pointer-events-none"
+                            >
+                              <EmblemIcon
+                                iconKey={
+                                  currentPlayer === 1
+                                    ? pair.p1.iconKey
+                                    : pair.p2.iconKey
+                                }
+                                className="w-[48%] h-[48%] text-[var(--sys-color-text-primary)]"
+                                strokeWidth={2}
+                              />
+                            </span>
+                          )}
 
-                {/* Active Kettle Water Stream Indicator */}
-                {isPouring && (
-                  <g>
-                    <circle
-                      cx={pointerPos.x}
-                      cy={pointerPos.y}
-                      r="14"
-                      fill="var(--sys-color-action-primary)"
-                      opacity="0.22"
-                    />
-                    <circle
-                      cx={pointerPos.x}
-                      cy={pointerPos.y}
-                      r="6"
-                      fill="var(--sys-color-action-primary)"
-                    />
-                  </g>
-                )}
-              </svg>
-
-              <p className="mt-3 text-xs text-center text-[var(--sys-color-text-muted)]">
-                {phase === "rest"
-                  ? "Pause and take a slow breath while the fresh grounds release CO₂."
-                  : "Press and hold inside the dripper (or hold Spacebar) to pour a calm, steady stream."}
-              </p>
-            </motion.section>
-          )}
-
-          {phase === "complete" && (
-            <motion.section
-              key="complete"
-              initial={{ opacity: 0, y: 12, scale: 0.98 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              transition={{ type: "spring", stiffness: 300, damping: 26 }}
-              className="w-full max-w-[440px] tonal-card p-6 border-[var(--sys-color-feedback-success)] text-center"
-            >
-              <div className="w-12 h-12 rounded-2xl bg-[var(--sys-color-feedback-success-bg)] text-[var(--sys-color-feedback-success)] flex items-center justify-center mx-auto mb-3">
-                <Sparkles className="w-6 h-6" />
-              </div>
-
-              <Badge tone="success" className="mb-2 font-mono tabular-nums">
-                {extractionPct}% Extraction
-              </Badge>
-
-              <h2 className="text-2xl font-semibold text-[var(--sys-color-text-primary)]">
-                {getExtractionVerdict(extractionPct)}
-              </h2>
-              <p className="mt-1.5 text-sm text-[var(--sys-color-text-secondary)]">
-                {bean.name} ({bean.origin}) ·{" "}
-                <span className="font-mono tabular-nums">
-                  {bean.targetMl} ml
-                </span>
-                {mode === "daily"
-                  ? ` in ${formatDuration(elapsedSeconds)}`
-                  : ""}
-                .
-              </p>
-
-              <div className="mt-4 flex flex-wrap items-center justify-center gap-1.5">
-                {bean.notes.map((n) => (
-                  <Badge key={n} tone="accent">
-                    {n}
-                  </Badge>
-                ))}
-              </div>
-
-              <div className="mt-6 flex flex-wrap items-center justify-center gap-2.5">
-                <Button variant="primary" onClick={handleCopyTastingCard}>
-                  {copied ? (
-                    <>
-                      <Check className="w-4 h-4" />
-                      <span>Copied tasting card</span>
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="w-4 h-4" />
-                      <span>Copy tasting card</span>
-                    </>
+                          {/* Dropped Tactile Disc with Gravity Spring */}
+                          {cell !== 0 && (
+                            <motion.div
+                              key={`disc-${matchNonce}-${row}-${col}`}
+                              initial={{
+                                y: -(row + 1.15) * 58,
+                                opacity: 0.92,
+                              }}
+                              animate={{ y: 0, opacity: 1 }}
+                              transition={{
+                                type: "spring",
+                                stiffness: 360,
+                                damping: 24,
+                                mass: 0.85,
+                              }}
+                              className="w-full h-full pointer-events-none"
+                            >
+                              <TactileDisc
+                                player={cell}
+                                pair={pair}
+                                size="board"
+                                isWinning={isWinningCell}
+                                isDimmed={isDimmed}
+                                isLatest={isLatest}
+                              />
+                            </motion.div>
+                          )}
+                        </button>
+                      );
+                    })
                   )}
-                </Button>
 
-                {mode === "daily" ? (
-                  <Button variant="secondary" onClick={() => setMode("zen")}>
-                    <Shuffle className="w-4 h-4" />
-                    <span>Try Zen Brew</span>
-                  </Button>
-                ) : (
-                  <Button
-                    variant="secondary"
-                    onClick={() => setZenCounter((n) => n + 1)}
-                  >
-                    <RotateCcw className="w-4 h-4" />
-                    <span>Brew another</span>
-                  </Button>
-                )}
+                  {/* Crisp Geometric Alignment Line on 4-in-a-Row */}
+                  {winningLineCoords && (
+                    <svg
+                      viewBox="0 0 700 600"
+                      preserveAspectRatio="none"
+                      aria-hidden="true"
+                      className="pointer-events-none absolute inset-0 w-full h-full z-30"
+                    >
+                      <motion.line
+                        x1={winningLineCoords.x1}
+                        y1={winningLineCoords.y1}
+                        x2={winningLineCoords.x2}
+                        y2={winningLineCoords.y2}
+                        stroke="var(--sys-color-surface-lowest)"
+                        strokeWidth="12"
+                        strokeLinecap="round"
+                        initial={{ pathLength: 0, opacity: 0 }}
+                        animate={{ pathLength: 1, opacity: 0.85 }}
+                        transition={{ duration: 0.35, ease: "easeOut" }}
+                      />
+                      <motion.line
+                        x1={winningLineCoords.x1}
+                        y1={winningLineCoords.y1}
+                        x2={winningLineCoords.x2}
+                        y2={winningLineCoords.y2}
+                        stroke="var(--sys-color-text-primary)"
+                        strokeWidth="5"
+                        strokeLinecap="round"
+                        strokeDasharray="10 8"
+                        initial={{ pathLength: 0, opacity: 0 }}
+                        animate={{ pathLength: 1, opacity: 1 }}
+                        transition={{ duration: 0.38, ease: "easeOut" }}
+                      />
+                    </svg>
+                  )}
+                </div>
 
-                <Link href="/">
-                  <Button variant="ghost">Back to Hub</Button>
-                </Link>
+                {/* Column Numbers Rail (Desktop Keyboard Cue) */}
+                <div
+                  aria-hidden="true"
+                  className="hidden sm:grid grid-cols-7 gap-2.5 mt-2.5 px-1 text-center"
+                >
+                  {Array.from({ length: COLS }).map((_, col) => (
+                    <span
+                      key={col}
+                      className={`font-mono text-[11px] tabular-nums transition-colors ${
+                        activePreviewCol === col
+                          ? "text-[var(--sys-color-text-primary)] font-semibold"
+                          : "text-[var(--sys-color-text-muted)]"
+                      }`}
+                    >
+                      {col + 1}
+                    </span>
+                  ))}
+                </div>
               </div>
-            </motion.section>
-          )}
-        </AnimatePresence>
+
+              {/* Subtle Tabletop Weighted Stand Base */}
+              <div
+                aria-hidden="true"
+                className="mx-auto w-[92%] h-2.5 rounded-b-xl bg-[var(--sys-color-surface-high)] border-x border-b border-[var(--sys-color-border-subtle)]"
+              />
+            </div>
+
+            {/* Post-Match Outcome Strip (Appears cleanly below the board so winning line stays visible) */}
+            <AnimatePresence>
+              {isFinished && (
+                <motion.section
+                  key="match-summary"
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 8 }}
+                  transition={{ duration: 0.24, ease: "easeOut" }}
+                  className="mt-6 w-full max-w-[540px] tonal-card p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-[var(--sys-color-surface-low)] border border-[var(--sys-color-border-subtle)] flex items-center justify-center shrink-0 text-[var(--sys-color-text-primary)]">
+                      <Trophy className="w-5 h-5" aria-hidden="true" />
+                    </div>
+                    <div>
+                      <h2 className="text-base font-semibold text-[var(--sys-color-text-primary)]">
+                        {outcomeTitle}
+                      </h2>
+                      <p className="mt-0.5 text-xs text-[var(--sys-color-text-secondary)]">
+                        <span className="font-mono tabular-nums">
+                          {history.length}
+                        </span>{" "}
+                        moves ·{" "}
+                        <span className="font-mono tabular-nums">
+                          {formatDuration(elapsedSeconds)}
+                        </span>{" "}
+                        · {pair.p1.name} vs {pair.p2.name}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 shrink-0">
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onClick={() => resetBoard(true)}
+                    >
+                      <RotateCcw className="w-4 h-4" />
+                      <span>Play again</span>
+                    </Button>
+
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={handleCopyShare}
+                    >
+                      {copied ? (
+                        <>
+                          <Check className="w-4 h-4" />
+                          <span>Copied</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-4 h-4" />
+                          <span>Copy grid</span>
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </motion.section>
+              )}
+            </AnimatePresence>
+          </section>
+
+          {/* Side Rail: Player Ledger, Emblem Picker & Controls */}
+          <aside
+            aria-label="Match ledger and controls"
+            className="w-full space-y-5 game-touch-surface"
+            onContextMenu={(e) => e.preventDefault()}
+          >
+            {/* Player Turn Ledger */}
+            <div className="tonal-card p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <h1 className="text-sm font-semibold text-[var(--sys-color-text-primary)]">
+                  Match ledger
+                </h1>
+                <span className="text-xs font-mono tabular-nums text-[var(--sys-color-text-muted)]">
+                  {history.length} / {ROWS * COLS} discs
+                </span>
+              </div>
+
+              <div className="space-y-2">
+                {/* Player 1 Row */}
+                <div
+                  className={`flex items-center justify-between gap-3 p-2.5 rounded-xl border transition-colors ${
+                    !isFinished && currentPlayer === 1
+                      ? "bg-[var(--sys-color-surface-low)] border-[var(--sys-color-text-primary)]"
+                      : "bg-transparent border-[var(--sys-color-border-subtle)]"
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <TactileDisc player={1} pair={pair} size="badge" />
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-[var(--sys-color-text-primary)] truncate">
+                        {p1Label} · {pair.p1.name}
+                      </div>
+                      <div className="text-xs text-[var(--sys-color-text-muted)]">
+                        {result.winner === 1
+                          ? "Winner · 4 connected"
+                          : !isFinished && currentPlayer === 1
+                            ? "Your turn · smooth disc"
+                            : "Smooth ivory disc"}
+                      </div>
+                    </div>
+                  </div>
+                  <span className="font-mono text-xs tabular-nums text-[var(--sys-color-text-secondary)] shrink-0">
+                    {p1Count}
+                  </span>
+                </div>
+
+                {/* Player 2 Row */}
+                <div
+                  className={`flex items-center justify-between gap-3 p-2.5 rounded-xl border transition-colors ${
+                    !isFinished && currentPlayer === 2
+                      ? "bg-[var(--sys-color-surface-low)] border-[var(--sys-color-text-primary)]"
+                      : "bg-transparent border-[var(--sys-color-border-subtle)]"
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <TactileDisc player={2} pair={pair} size="badge" />
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium text-[var(--sys-color-text-primary)] truncate">
+                        {p2Label} · {pair.p2.name}
+                      </div>
+                      <div className="text-xs text-[var(--sys-color-text-muted)]">
+                        {result.winner === 2
+                          ? "Winner · 4 connected"
+                          : botThinking
+                            ? "Thinking…"
+                            : !isFinished && currentPlayer === 2
+                              ? "Active turn · grooved disc"
+                              : "Grooved charcoal disc"}
+                      </div>
+                    </div>
+                  </div>
+                  <span className="font-mono text-xs tabular-nums text-[var(--sys-color-text-secondary)] shrink-0">
+                    {p2Count}
+                  </span>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="pt-2 border-t border-[var(--sys-color-border-subtle)] flex items-center gap-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={handleUndo}
+                  disabled={history.length === 0 || botThinking}
+                  className="flex-1"
+                >
+                  <Undo2 className="w-4 h-4" />
+                  <span>Undo</span>
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => resetBoard(true)}
+                  className="flex-1"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  <span>New game</span>
+                </Button>
+              </div>
+            </div>
+
+            {/* Emblem Pair Selector (Switch anytime, zero colour needed) */}
+            <div className="tonal-card p-4">
+              <div className="mb-3">
+                <h2 className="text-sm font-semibold text-[var(--sys-color-text-primary)]">
+                  Emblem set
+                </h2>
+                <p className="text-xs text-[var(--sys-color-text-muted)] mt-0.5">
+                  Shape &amp; texture pairs — zero colour cues.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                {EMBLEM_PAIRS.map((item) => {
+                  const selected = item.id === emblemPairId;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => {
+                        soundEngine.playPickup();
+                        setEmblemPairId(item.id);
+                      }}
+                      aria-pressed={selected}
+                      className={`min-h-[44px] px-3 py-2 rounded-xl border text-left transition-colors cursor-pointer flex items-center justify-between gap-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sys-color-border-focus)] ${
+                        selected
+                          ? "bg-[var(--sys-color-surface-low)] border-[var(--sys-color-text-primary)] text-[var(--sys-color-text-primary)]"
+                          : "bg-transparent border-[var(--sys-color-border-subtle)] text-[var(--sys-color-text-secondary)] hover:bg-[var(--sys-color-surface-low)]"
+                      }`}
+                    >
+                      <span className="text-xs font-medium whitespace-nowrap">
+                        {item.label}
+                      </span>
+                      <span className="inline-flex items-center gap-1 shrink-0">
+                        <span className="w-5 h-5 rounded-full bg-[var(--sys-color-surface-lowest)] border border-[var(--sys-color-text-primary)] text-[var(--sys-color-text-primary)] flex items-center justify-center">
+                          <EmblemIcon
+                            iconKey={item.p1.iconKey}
+                            className="w-3 h-3"
+                            strokeWidth={2.2}
+                          />
+                        </span>
+                        <span className="w-5 h-5 rounded-full bg-[var(--sys-color-text-primary)] text-[var(--sys-color-surface-lowest)] flex items-center justify-center">
+                          <EmblemIcon
+                            iconKey={item.p2.iconKey}
+                            className="w-3 h-3"
+                            strokeWidth={2.2}
+                          />
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Free Play Options (Opponent & Difficulty) */}
+            {mode === "zen" && (
+              <div className="tonal-card p-4 space-y-4">
+                <div>
+                  <h2 className="text-sm font-semibold text-[var(--sys-color-text-primary)] mb-2">
+                    Opponent
+                  </h2>
+                  <div className="grid grid-cols-2 gap-1.5 p-1 rounded-xl bg-[var(--sys-color-surface-low)] border border-[var(--sys-color-border-subtle)]">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (opponentMode !== "bot") {
+                          setOpponentMode("bot");
+                          resetBoard(true);
+                        }
+                      }}
+                      className={`min-h-[40px] px-3 py-1.5 rounded-lg text-xs font-medium inline-flex items-center justify-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
+                        opponentMode === "bot"
+                          ? "bg-[var(--sys-color-surface-lowest)] text-[var(--sys-color-text-primary)] shadow-xs"
+                          : "text-[var(--sys-color-text-secondary)] hover:text-[var(--sys-color-text-primary)]"
+                      }`}
+                    >
+                      <Bot className="w-3.5 h-3.5" aria-hidden="true" />
+                      <span>vs Bot</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (opponentMode !== "local") {
+                          setOpponentMode("local");
+                          resetBoard(true);
+                        }
+                      }}
+                      className={`min-h-[40px] px-3 py-1.5 rounded-lg text-xs font-medium inline-flex items-center justify-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
+                        opponentMode === "local"
+                          ? "bg-[var(--sys-color-surface-lowest)] text-[var(--sys-color-text-primary)] shadow-xs"
+                          : "text-[var(--sys-color-text-secondary)] hover:text-[var(--sys-color-text-primary)]"
+                      }`}
+                    >
+                      <Users className="w-3.5 h-3.5" aria-hidden="true" />
+                      <span>2 Players</span>
+                    </button>
+                  </div>
+                </div>
+
+                {opponentMode === "bot" && (
+                  <div>
+                    <h2 className="text-sm font-semibold text-[var(--sys-color-text-primary)] mb-2">
+                      Bot skill
+                    </h2>
+                    <div className="grid grid-cols-3 gap-1.5 p-1 rounded-xl bg-[var(--sys-color-surface-low)] border border-[var(--sys-color-border-subtle)]">
+                      {(["gentle", "clever", "master"] as Difficulty[]).map(
+                        (lvl) => (
+                          <button
+                            key={lvl}
+                            type="button"
+                            onClick={() => {
+                              soundEngine.playPickup();
+                              setDifficulty(lvl);
+                            }}
+                            className={`min-h-[38px] px-2 py-1.5 rounded-lg text-xs font-medium capitalize transition-colors cursor-pointer whitespace-nowrap ${
+                              difficulty === lvl
+                                ? "bg-[var(--sys-color-surface-lowest)] text-[var(--sys-color-text-primary)] shadow-xs"
+                                : "text-[var(--sys-color-text-secondary)] hover:text-[var(--sys-color-text-primary)]"
+                            }`}
+                          >
+                            {lvl}
+                          </button>
+                        )
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Quiet Navigation Footer Link */}
+            <div className="flex items-center justify-between px-1 text-xs text-[var(--sys-color-text-muted)]">
+              <span className="hidden sm:inline">Keys 1–7 or ← → to play</span>
+              <span className="sm:hidden">Tap any column to drop</span>
+              <Link
+                href="/"
+                className="font-medium text-[var(--sys-color-text-secondary)] hover:text-[var(--sys-color-text-primary)] underline-offset-4 hover:underline"
+              >
+                Back to Hub
+              </Link>
+            </div>
+          </aside>
+        </div>
       </main>
 
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
