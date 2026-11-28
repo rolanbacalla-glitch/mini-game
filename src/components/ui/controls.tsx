@@ -108,7 +108,7 @@ export const TooltipContent = React.forwardRef<
       ref={ref}
       sideOffset={sideOffset}
       className={cn(
-        "z-50 rounded-[var(--radius-sm,8px)] border border-[var(--border-default)]",
+        "z-[var(--sys-z-popover,300)] rounded-[var(--radius-sm,8px)] border border-[var(--border-default)]",
         "bg-[var(--bg-surface-elevated)] px-3 py-1.5 text-xs text-[var(--text-primary)] shadow-lg",
         className
       )}
@@ -131,7 +131,7 @@ export const PopoverContent = React.forwardRef<
       ref={ref}
       sideOffset={sideOffset}
       className={cn(
-        "z-50 w-72 rounded-[var(--radius-lg,16px)] border border-[var(--border-default)]",
+        "z-[var(--sys-z-popover,300)] w-72 rounded-[var(--radius-lg,16px)] border border-[var(--border-default)]",
         "bg-[var(--bg-surface-elevated)] p-4 text-sm text-[var(--text-primary)] shadow-xl",
         FOCUS_RING_CLASSES,
         className
@@ -170,18 +170,21 @@ SelectTrigger.displayName = "SelectTrigger";
 export const SelectContent = React.forwardRef<
   React.ComponentRef<typeof RadixSelect.Content>,
   React.ComponentPropsWithoutRef<typeof RadixSelect.Content>
->(({ className, children, ...props }, ref) => (
+>(({ className, children, position = "popper", sideOffset = 6, collisionPadding = 12, ...props }, ref) => (
   <RadixSelect.Portal>
     <RadixSelect.Content
       ref={ref}
+      position={position}
+      sideOffset={sideOffset}
+      collisionPadding={collisionPadding}
       className={cn(
-        "z-50 overflow-hidden rounded-[var(--radius-md,12px)] border border-[var(--border-default)]",
-        "bg-[var(--bg-surface-elevated)] p-1 text-sm text-[var(--text-primary)] shadow-xl",
+        "z-[var(--sys-z-popover,300)] min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-[var(--radius-md,12px)] border border-[var(--sys-color-border-default)]",
+        "bg-[var(--sys-color-surface-lowest)] p-1 text-sm text-[var(--sys-color-text-primary)] shadow-2xl",
         className
       )}
       {...props}
     >
-      <RadixSelect.Viewport>{children}</RadixSelect.Viewport>
+      <RadixSelect.Viewport className="p-0.5">{children}</RadixSelect.Viewport>
     </RadixSelect.Content>
   </RadixSelect.Portal>
 ));
