@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
   Check,
   Copy,
@@ -78,10 +78,12 @@ function MiniPiecePreview({
   piece,
   rotation,
   cellSize = 20,
+  reducedMotion = false,
 }: {
   piece: PuzzlePiece;
   rotation: number;
   cellSize?: number;
+  reducedMotion?: boolean;
 }) {
   const cells = rotateCells(piece.solutionCells, rotation);
   const { rows, cols } = getPieceDimensions(cells);
@@ -89,7 +91,15 @@ function MiniPiecePreview({
   cells.forEach((c, idx) => cellMap.set(`${c.row},${c.col}`, idx));
 
   return (
-    <div
+    <motion.div
+      key={rotation}
+      initial={reducedMotion ? false : { rotate: -18, scale: 0.9 }}
+      animate={{ rotate: 0, scale: 1 }}
+      transition={
+        reducedMotion
+          ? { duration: 0.01 }
+          : { type: "spring", stiffness: 420, damping: 24 }
+      }
       className="grid gap-1"
       style={{
         gridTemplateRows: `repeat(${rows}, ${cellSize}px)`,
@@ -119,7 +129,7 @@ function MiniPiecePreview({
           );
         })
       )}
-    </div>
+    </motion.div>
   );
 }
 
@@ -134,6 +144,7 @@ export function LoomAndLatchGame() {
 
   const seed = mode === "daily" ? todayKey : `zen-${todayKey}-${zenCounter}`;
   const puzzle = useMemo(() => generateLoomPuzzle(seed), [seed]);
+  const prefersReducedMotion = Boolean(useReducedMotion());
 
   const [placedPieces, setPlacedPieces] = useState<
     Record<string, PlacedPieceState>
@@ -666,28 +677,94 @@ export function LoomAndLatchGame() {
                     }}
                     onFocus={() => setHoverCell({ row, col })}
                     onClick={() => handleCellClick(row, col)}
-                    className="relative rounded-xl border transition-all duration-150 flex items-center justify-center cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sys-color-border-focus)]"
-                    style={{
-                      backgroundColor: occupied
-                        ? occupied.piece.colour.fill
-                        : "var(--sys-color-surface-lowest)",
-                      borderColor: occupied
-                        ? occupied.piece.colour.stroke
-                        : "var(--sys-color-border-subtle)",
-                      boxShadow: occupied
-                        ? "inset 0 2px 0 var(--sys-specular-top)"
-                        : undefined,
-                    }}
+                    className="relative rounded-xl border border-[var(--sys-color-border-subtle)] bg-[var(--sys-color-surface-lowest)] flex items-center justify-center cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sys-color-border-focus)]"
                   >
+                    {/* Animated Placed Polyomino Tile Cap */}
+                    <AnimatePresence>
+                      {occupied && (
+                        <motion.span
+                          key={`placed-${occupied.piece.id}`}
+                          initial={
+                            prefersReducedMotion
+                              ? { opacity: 0 }
+                              : { scale: 0.72, opacity: 0, y: -6 }
+                          }
+                          animate={{ scale: 1, opacity: 1, y: 0 }}
+                          exit={
+                            prefersReducedMotion
+                              ? { opacity: 0, transition: { duration: 0.01 } }
+                              : {
+                                  scale: 0.76,
+                                  opacity: 0,
+                                  y: -5,
+                                  transition: {
+                                    duration: 0.14,
+                                    ease: [0.4, 0, 1, 1],
+                                  },
+                                }
+                          }
+                          transition={
+                            prefersReducedMotion
+                              ? { duration: 0.06 }
+                              : {
+                                  type: "spring",
+                                  stiffness: 380,
+                                  damping: 25,
+                                  mass: 0.78,
+                                }
+                          }
+                          className="absolute inset-[-1px] rounded-xl border pointer-events-none flex items-center justify-center z-10"
+                          style={{
+                            backgroundColor: occupied.piece.colour.fill,
+                            borderColor: occupied.piece.colour.stroke,
+                            boxShadow: "inset 0 2px 0 var(--sys-specular-top)",
+                            willChange: "transform",
+                          }}
+                        >
+                          {/* Latched Eyelet (occupied) */}
+                          {occupied.isEyelet && (
+                            <motion.span
+                              initial={
+                                prefersReducedMotion ? false : { scale: 0.6 }
+                              }
+                              animate={{ scale: 1 }}
+                              transition={{
+                                type: "spring",
+                                stiffness: 420,
+                                damping: 22,
+                              }}
+                              className="w-5 h-5 rounded-full bg-[var(--sys-color-surface-lowest)] ring-2 ring-[var(--sys-color-surface-lowest)]/90 shadow-sm flex items-center justify-center pointer-events-none"
+                            >
+                              {peg && peg.pieceId === occupied.piece.id && (
+                                <span
+                                  className="w-2.5 h-2.5 rounded-full"
+                                  style={{ backgroundColor: peg.colour.fill }}
+                                />
+                              )}
+                            </motion.span>
+                          )}
+                        </motion.span>
+                      )}
+                    </AnimatePresence>
+
                     {/* Magnetic Ghost Preview */}
                     {isGhostCell && ghostPreview && (
-                      <span
-                        className="absolute inset-0 rounded-[11px] pointer-events-none transition-opacity"
+                      <motion.span
+                        initial={
+                          prefersReducedMotion
+                            ? false
+                            : { scale: 0.9, opacity: 0 }
+                        }
+                        animate={{
+                          scale: 1,
+                          opacity: ghostPreview.valid ? 0.36 : 0.28,
+                        }}
+                        transition={{ duration: 0.12 }}
+                        className="absolute inset-0 rounded-[11px] pointer-events-none z-20"
                         style={{
                           backgroundColor: ghostPreview.valid
                             ? selectedPiece?.colour.fill
                             : "var(--sys-color-feedback-error)",
-                          opacity: ghostPreview.valid ? 0.36 : 0.28,
                           border: ghostPreview.valid
                             ? `2px solid ${selectedPiece?.colour.fill}`
                             : "2px dashed var(--sys-color-border-error)",
@@ -726,27 +803,6 @@ export function LoomAndLatchGame() {
                           style={{ backgroundColor: peg.colour.fill }}
                         />
                       </span>
-                    )}
-
-                    {/* Latched Eyelet (occupied) */}
-                    {occupied && occupied.isEyelet && (
-                      <motion.span
-                        initial={{ scale: 0.6 }}
-                        animate={{ scale: 1 }}
-                        transition={{
-                          type: "spring",
-                          stiffness: 420,
-                          damping: 22,
-                        }}
-                        className="w-5 h-5 rounded-full bg-[var(--sys-color-surface-lowest)] ring-2 ring-[var(--sys-color-surface-lowest)]/90 shadow-sm flex items-center justify-center pointer-events-none"
-                      >
-                        {peg && peg.pieceId === occupied.piece.id && (
-                          <span
-                            className="w-2.5 h-2.5 rounded-full"
-                            style={{ backgroundColor: peg.colour.fill }}
-                          />
-                        )}
-                      </motion.span>
                     )}
                   </button>
                 );
@@ -890,34 +946,74 @@ export function LoomAndLatchGame() {
               </p>
             ) : (
               <div className="flex flex-wrap items-center justify-center gap-3">
-                {unplacedPieces.map((piece) => {
-                  const isSelected = selectedPieceId === piece.id;
-                  const rot = trayRotations[piece.id] ?? 0;
+                <AnimatePresence mode="popLayout">
+                  {unplacedPieces.map((piece) => {
+                    const isSelected = selectedPieceId === piece.id;
+                    const rot = trayRotations[piece.id] ?? 0;
 
-                  return (
-                    <motion.button
-                      key={piece.id}
-                      layout
-                      type="button"
-                      draggable={false}
-                      onContextMenu={(e) => e.preventDefault()}
-                      onClick={() => handleTrayPieceClick(piece.id)}
-                      whileHover={{ y: -2 }}
-                      whileTap={{ scale: 0.96 }}
-                      aria-pressed={isSelected}
-                      aria-label={`${piece.colour.name} tile${
-                        piece.eyeletIndex !== null ? " with latch eyelet" : ""
-                      }${isSelected ? ", selected. Press again to rotate" : ""}`}
-                      className={`p-3 rounded-2xl border transition-all flex items-center justify-center min-w-[84px] min-h-[84px] cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sys-color-border-focus)] ${
-                        isSelected
-                          ? "bg-[var(--sys-color-bg-action-primary-subtle)] border-[var(--sys-color-border-focus)] ring-2 ring-[var(--sys-color-border-focus)]/30"
-                          : "bg-[var(--sys-color-surface-low)] border-[var(--sys-color-border-subtle)] hover:bg-[var(--sys-color-surface-high)]"
-                      }`}
-                    >
-                      <MiniPiecePreview piece={piece} rotation={rot} />
-                    </motion.button>
-                  );
-                })}
+                    return (
+                      <motion.button
+                        key={piece.id}
+                        layout={!prefersReducedMotion}
+                        initial={
+                          prefersReducedMotion
+                            ? { opacity: 0 }
+                            : { scale: 0.84, opacity: 0 }
+                        }
+                        animate={{ scale: 1, opacity: 1 }}
+                        exit={
+                          prefersReducedMotion
+                            ? { opacity: 0, transition: { duration: 0.01 } }
+                            : {
+                                scale: 0.8,
+                                opacity: 0,
+                                transition: { duration: 0.14 },
+                              }
+                        }
+                        transition={
+                          prefersReducedMotion
+                            ? { duration: 0.01 }
+                            : {
+                                layout: {
+                                  type: "spring",
+                                  stiffness: 340,
+                                  damping: 28,
+                                },
+                                scale: {
+                                  type: "spring",
+                                  stiffness: 380,
+                                  damping: 26,
+                                },
+                                opacity: { duration: 0.16 },
+                              }
+                        }
+                        type="button"
+                        draggable={false}
+                        onContextMenu={(e) => e.preventDefault()}
+                        onClick={() => handleTrayPieceClick(piece.id)}
+                        whileHover={prefersReducedMotion ? undefined : { y: -2 }}
+                        whileTap={
+                          prefersReducedMotion ? undefined : { scale: 0.96 }
+                        }
+                        aria-pressed={isSelected}
+                        aria-label={`${piece.colour.name} tile${
+                          piece.eyeletIndex !== null ? " with latch eyelet" : ""
+                        }${isSelected ? ", selected. Press again to rotate" : ""}`}
+                        className={`p-3 rounded-2xl border transition-colors flex items-center justify-center min-w-[84px] min-h-[84px] cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sys-color-border-focus)] ${
+                          isSelected
+                            ? "bg-[var(--sys-color-bg-action-primary-subtle)] border-[var(--sys-color-border-focus)] ring-2 ring-[var(--sys-color-border-focus)]/30"
+                            : "bg-[var(--sys-color-surface-low)] border-[var(--sys-color-border-subtle)] hover:bg-[var(--sys-color-surface-high)]"
+                        }`}
+                      >
+                        <MiniPiecePreview
+                          piece={piece}
+                          rotation={rot}
+                          reducedMotion={prefersReducedMotion}
+                        />
+                      </motion.button>
+                    );
+                  })}
+                </AnimatePresence>
               </div>
             )}
           </section>

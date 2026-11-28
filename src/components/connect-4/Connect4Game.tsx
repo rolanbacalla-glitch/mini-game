@@ -944,35 +944,65 @@ export function Connect4Game() {
                             </span>
                           )}
 
-                          {/* Dropped Tactile Disc with Gravity Spring */}
-                          {cell !== 0 && (
-                            <motion.div
-                              key={`disc-${matchNonce}-${row}-${col}`}
-                              initial={{
-                                y: -(row + 1.15) * 58,
-                                opacity: 0.92,
-                              }}
-                              animate={{ y: 0, opacity: 1 }}
-                              transition={{
-                                type: "spring",
-                                stiffness: 360,
-                                damping: 24,
-                                mass: 0.85,
-                              }}
-                              className="w-full h-full pointer-events-none"
-                            >
-                              <TactileDisc
-                                player={cell}
-                                pair={pair}
-                                size="board"
-                                isWinning={isWinningCell}
-                                winOrder={winOrder ?? 0}
-                                isDimmed={isDimmed}
-                                isLatest={isLatest}
-                                reducedMotion={prefersReducedMotion}
-                              />
-                            </motion.div>
-                          )}
+                          {/* Dropped Tactile Disc with Responsive Gravity Spring & Smooth Undo Lift */}
+                          <AnimatePresence>
+                            {cell !== 0 && (
+                              <motion.div
+                                key={`disc-${matchNonce}-${row}-${col}`}
+                                initial={
+                                  prefersReducedMotion
+                                    ? { opacity: 0 }
+                                    : {
+                                        y: `${-(row + 1.25) * 108}%`,
+                                        opacity: 0.94,
+                                      }
+                                }
+                                animate={{ y: "0%", opacity: 1 }}
+                                exit={
+                                  prefersReducedMotion
+                                    ? {
+                                        opacity: 0,
+                                        transition: { duration: 0.01 },
+                                      }
+                                    : {
+                                        y: "-40%",
+                                        scale: 0.82,
+                                        opacity: 0,
+                                        transition: {
+                                          duration: 0.16,
+                                          ease: [0.4, 0, 1, 1],
+                                        },
+                                      }
+                                }
+                                transition={
+                                  prefersReducedMotion
+                                    ? { duration: 0.08 }
+                                    : {
+                                        y: {
+                                          type: "spring",
+                                          stiffness: 320,
+                                          damping: 23,
+                                          mass: 0.92,
+                                        },
+                                        opacity: { duration: 0.14 },
+                                      }
+                                }
+                                style={{ willChange: "transform" }}
+                                className="w-full h-full pointer-events-none"
+                              >
+                                <TactileDisc
+                                  player={cell}
+                                  pair={pair}
+                                  size="board"
+                                  isWinning={isWinningCell}
+                                  winOrder={winOrder ?? 0}
+                                  isDimmed={isDimmed}
+                                  isLatest={isLatest}
+                                  reducedMotion={prefersReducedMotion}
+                                />
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
                         </button>
                       );
                     })

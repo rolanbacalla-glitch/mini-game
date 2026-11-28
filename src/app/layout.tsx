@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/ThemeProvider";
+import { GamesDisclaimerFooter } from "@/components/GamesDisclaimerFooter";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -47,7 +48,10 @@ export default function RootLayout({
         />
       </head>
       <body className="min-h-full bg-[var(--sys-color-surface-canvas)] text-[var(--sys-color-text-primary)] font-sans clerk-dot-canvas selection:bg-[var(--sys-color-bg-action-primary-subtle)] selection:text-[var(--sys-color-text-primary)]">
-        <ThemeProvider>{children}</ThemeProvider>
+        <ThemeProvider>
+          {children}
+          <GamesDisclaimerFooter />
+        </ThemeProvider>
       </body>
     </html>
   );

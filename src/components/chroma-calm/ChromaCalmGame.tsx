@@ -3,7 +3,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { AnimatePresence, motion } from "framer-motion";
+import {
+  AnimatePresence,
+  LayoutGroup,
+  motion,
+  useReducedMotion,
+} from "framer-motion";
 import {
   Check,
   Copy,
@@ -67,7 +72,9 @@ export function ChromaCalmGame() {
 
   const [board, setBoard] = useState<ChromaSwatch[]>(puzzle.initialBoard);
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
+  const [swappingIds, setSwappingIds] = useState<number[]>([]);
   const [hintPair, setHintPair] = useState<[number, number] | null>(null);
+  const prefersReducedMotion = Boolean(useReducedMotion());
 
   const [swaps, setSwaps] = useState<number>(0);
   const [elapsedSeconds, setElapsedSeconds] = useState<number>(0);
@@ -101,6 +108,7 @@ export function ChromaCalmGame() {
   useEffect(() => {
     setBoard(puzzle.initialBoard);
     setSelectedIdx(null);
+    setSwappingIds([]);
     setHintPair(null);
     setSwaps(0);
     setElapsedSeconds(0);
@@ -158,6 +166,7 @@ export function ChromaCalmGame() {
     nextBoard[index] = temp;
 
     const nextSwaps = swaps + 1;
+    setSwappingIds([nextBoard[selectedIdx].targetIndex, nextBoard[index].targetIndex]);
     setBoard(nextBoard);
     setSwaps(nextSwaps);
     setSelectedIdx(null);
@@ -374,60 +383,88 @@ export function ChromaCalmGame() {
           onContextMenu={(e) => e.preventDefault()}
           className="w-full max-w-[396px] aspect-square tonal-card-elevated rounded-[24px] p-3.5 sm:p-4 select-none game-touch-surface"
         >
-          <div className="grid grid-cols-5 grid-rows-5 gap-2 w-full h-full">
-            {board.map((swatch, index) => {
-              const isSelected = selectedIdx === index;
-              const isHinted =
-                hintPair !== null &&
-                (hintPair[0] === index || hintPair[1] === index);
+          <LayoutGroup id={`chroma-${seed}`}>
+            <div className="grid grid-cols-5 grid-rows-5 gap-2 w-full h-full">
+              {board.map((swatch, index) => {
+                const isSelected = selectedIdx === index;
+                const isSwapping = swappingIds.includes(swatch.targetIndex);
+                const isHinted =
+                  hintPair !== null &&
+                  (hintPair[0] === index || hintPair[1] === index);
 
-              return (
-                <motion.button
-                  key={swatch.targetIndex}
-                  layout
-                  transition={{ type: "spring", stiffness: 380, damping: 30 }}
-                  type="button"
-                  draggable={false}
-                  onContextMenu={(e) => e.preventDefault()}
-                  onClick={() => handleSwatchClick(index)}
-                  aria-label={`Row ${Math.floor(index / CHROMA_GRID_SIZE) + 1}, Column ${(index % CHROMA_GRID_SIZE) + 1}${
-                    swatch.locked ? ", pinned anchor corner" : ""
-                  }${isSelected ? ", selected" : ""}`}
-                  className={`relative rounded-xl transition-shadow flex items-center justify-center focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sys-color-border-focus)] ${
-                    swatch.locked ? "cursor-default" : "cursor-pointer"
-                  } ${
-                    isSelected
-                      ? "ring-3 ring-[var(--sys-color-border-focus)] scale-[1.06] z-10 shadow-lg"
-                      : ""
-                  }`}
-                  style={{
-                    backgroundColor: swatch.cssColor,
-                  }}
-                >
-                  {/* Pinned Corner Anchor Dot */}
-                  {swatch.locked && (
-                    <span
-                      aria-hidden="true"
-                      className="w-2 h-2 rounded-full bg-[var(--sys-color-surface-lowest)]/85 shadow-xs"
-                    />
-                  )}
+                return (
+                  <motion.button
+                    key={swatch.targetIndex}
+                    layout={!prefersReducedMotion}
+                    transition={
+                      prefersReducedMotion
+                        ? { duration: 0.01 }
+                        : {
+                            layout: {
+                              type: "spring",
+                              stiffness: 310,
+                              damping: 27,
+                              mass: 0.8,
+                            },
+                            scale: {
+                              type: "spring",
+                              stiffness: 380,
+                              damping: 26,
+                            },
+                          }
+                    }
+                    animate={
+                      isSelected && !prefersReducedMotion
+                        ? { scale: 1.07 }
+                        : { scale: 1 }
+                    }
+                    type="button"
+                    draggable={false}
+                    onContextMenu={(e) => e.preventDefault()}
+                    onClick={() => handleSwatchClick(index)}
+                    aria-label={`Row ${Math.floor(index / CHROMA_GRID_SIZE) + 1}, Column ${(index % CHROMA_GRID_SIZE) + 1}${
+                      swatch.locked ? ", pinned anchor corner" : ""
+                    }${isSelected ? ", selected" : ""}`}
+                    className={`relative rounded-xl transition-shadow flex items-center justify-center focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--sys-color-border-focus)] ${
+                      swatch.locked ? "cursor-default" : "cursor-pointer"
+                    } ${
+                      isSelected
+                        ? "ring-3 ring-[var(--sys-color-border-focus)] shadow-lg"
+                        : isSwapping
+                          ? "shadow-md"
+                          : ""
+                    }`}
+                    style={{
+                      backgroundColor: swatch.cssColor,
+                      zIndex: isSelected ? 30 : isSwapping ? 20 : 1,
+                      willChange: "transform",
+                    }}
+                  >
+                    {/* Pinned Corner Anchor Dot */}
+                    {swatch.locked && (
+                      <span
+                        aria-hidden="true"
+                        className="w-2 h-2 rounded-full bg-[var(--sys-color-surface-lowest)]/85 shadow-xs"
+                      />
+                    )}
 
-                  {/* Gentle Nudge Pulse */}
-                  {isHinted && (
-                    <motion.span
-                      initial={{ opacity: 0.4, scale: 0.85 }}
-                      animate={{
-                        opacity: [0.35, 0.95, 0.35],
-                        scale: [0.85, 1.05, 0.85],
-                      }}
-                      transition={{ duration: 1.0, repeat: Infinity }}
-                      className="absolute inset-1 rounded-lg border-2 border-[var(--sys-color-surface-lowest)] pointer-events-none"
-                    />
-                  )}
-                </motion.button>
-              );
-            })}
-          </div>
+                    {/* Gentle Nudge Pulse */}
+                    {isHinted && (
+                      <motion.span
+                        initial={{ opacity: 0.4, scale: 0.85 }}
+                        animate={{
+                          opacity: [0.35, 0.95, 0.35],
+                          scale: [0.85, 1.05, 0.85],
+                        }}
+                        transition={{ duration: 1.0, repeat: Infinity }}
+                        className="absolute inset-1 rounded-lg border-2 border-[var(--sys-color-surface-lowest)] pointer-events-none"
+                      />
+                    )}
+                  </motion.button>
+                );
+              })}
+            </div>
+          </LayoutGroup>
         </div>
 
         {/* Action Controls */}

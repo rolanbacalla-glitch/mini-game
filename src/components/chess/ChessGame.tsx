@@ -62,6 +62,7 @@ import {
   type ChessCharacterId,
   type ChessMove,
   type ChessPiece,
+  type ChessPlayer,
   type ChessState,
   type Coord,
   type OpponentMode,
@@ -126,7 +127,6 @@ function ChessToken({
   isInCheckKing,
   isWinnerPiece,
   winOrder,
-  layoutPrefix,
   size = "board",
   reducedMotion = false,
 }: {
@@ -135,7 +135,6 @@ function ChessToken({
   isInCheckKing?: boolean;
   isWinnerPiece?: boolean;
   winOrder?: number;
-  layoutPrefix?: string;
   size?: "board" | "badge";
   reducedMotion?: boolean;
 }) {
@@ -153,26 +152,21 @@ function ChessToken({
 
   return (
     <motion.div
-      layoutId={
-        size === "board" && !reducedMotion
-          ? `${layoutPrefix ?? "0"}-${piece.id}`
-          : undefined
+      transition={
+        reducedMotion
+          ? { duration: 0.01 }
+          : {
+              type: "spring",
+              stiffness: 380,
+              damping: 26,
+              delay: animateWin ? cascadeDelay : 0,
+            }
       }
-      transition={{
-        layout: {
-          type: "spring",
-          stiffness: 430,
-          damping: 32,
-          mass: 0.85,
-        },
-        duration: 0.45,
-        delay: animateWin ? cascadeDelay : 0,
-      }}
       animate={
         animateWin
           ? { scale: [1, 1.12, 1.03] }
           : isSelected
-            ? { scale: 1.07, y: -2 }
+            ? { scale: 1.08, y: -3 }
             : { scale: 1, y: 0 }
       }
       className={`relative rounded-full flex items-center justify-center select-none pointer-events-none ${sizeClass} ${
@@ -181,7 +175,7 @@ function ChessToken({
           : "bg-[var(--sys-color-text-primary)] text-[var(--sys-color-surface-lowest)] border-2 border-[var(--sys-color-text-primary)] shadow-[inset_0_2px_4px_rgba(0,0,0,0.28),0_3px_6px_rgba(0,0,0,0.18)]"
       } ${
         isSelected
-          ? "ring-2 ring-offset-2 ring-[var(--sys-color-border-focus)] ring-offset-[var(--sys-color-surface-high)] z-20"
+          ? "ring-2 ring-offset-2 ring-[var(--sys-color-border-focus)] ring-offset-[var(--sys-color-surface-high)] shadow-[0_10px_20px_-6px_rgba(0,0,0,0.34)]"
           : ""
       }`}
     >
@@ -278,8 +272,14 @@ export function ChessGame() {
 
   const [lastMoveFrom, setLastMoveFrom] = useState<Coord | null>(null);
   const [lastMoveTo, setLastMoveTo] = useState<Coord | null>(null);
+  const [movingPieceIds, setMovingPieceIds] = useState<string[]>([]);
   const [turns, setTurns] = useState<number>(0);
   const [undoStack, setUndoStack] = useState<TurnSnapshot[]>([]);
+
+  // White (1 / Ivory) always moves first. Player chooses whether to move first (White) or second (Black).
+  const [humanSide, setHumanSide] = useState<ChessPlayer>(1);
+  // In 2-Player mode, choose whether Player 1 or Player 2 moves first as White (Ivory).
+  const [whiteOwnerIn2P, setWhiteOwnerIn2P] = useState<1 | 2>(1);
 
   const [botThinking, setBotThinking] = useState<boolean>(false);
   const [manualFlipped, setManualFlipped] = useState<boolean>(false);
@@ -299,9 +299,14 @@ export function ChessGame() {
   const recordedMatchRef = useRef<number>(0);
 
   const activeOpponent: OpponentMode = mode === "2p" ? "local" : "bot";
+  const botSide: ChessPlayer = humanSide === 1 ? 2 : 1;
   const currentPlayer = chessState.turn;
   const isBoardFlipped =
-    mode === "2p" && (autoFlip ? currentPlayer === 2 : manualFlipped);
+    mode === "2p"
+      ? autoFlip
+        ? currentPlayer === 2
+        : manualFlipped
+      : humanSide === 2;
 
   const latestStateRef = useRef({
     chessState,
@@ -421,6 +426,7 @@ export function ChessGame() {
     setPendingPromotion(null);
     setLastMoveFrom(null);
     setLastMoveTo(null);
+    setMovingPieceIds([]);
     setTurns(0);
     setUndoStack([]);
     setBotThinking(false);
@@ -475,11 +481,21 @@ export function ChessGame() {
         soundEngine.playSnap();
       }
 
+      const movedIds: string[] = [];
+      const movedPiece = nextState.board[move.to.row][move.to.col];
+      if (movedPiece) movedIds.push(movedPiece.id);
+      if (move.isCastle) {
+        const rookCol = move.isCastle === "kingside" ? 5 : 3;
+        const rookPiece = nextState.board[move.to.row][rookCol];
+        if (rookPiece) movedIds.push(rookPiece.id);
+      }
+
       setUndoStack((prev) => [...prev, snap]);
       setChessState(nextState);
       setPositionCounts(nextCounts);
       setLastMoveFrom(move.from);
       setLastMoveTo(move.to);
+      setMovingPieceIds(movedIds);
       setTurns(snap.turns + 1);
       setSelectedSquare(null);
       setPendingPromotion(null);
@@ -492,21 +508,23 @@ export function ChessGame() {
     if (!isFinished || recordedMatchRef.current === matchNonce) return;
     recordedMatchRef.current = matchNonce;
 
-    if (
-      outcome.winner === 1 ||
-      (activeOpponent === "local" && outcome.winner === 2)
-    ) {
+    const humanWon =
+      activeOpponent === "bot"
+        ? outcome.winner === humanSide
+        : outcome.winner === 1 || outcome.winner === 2;
+
+    if (humanWon) {
       soundEngine.playComplete();
     } else if (outcome.winner === "draw") {
       soundEngine.playLatch();
     }
 
     if (mode === "daily") {
-      if (outcome.winner === 1 || outcome.winner === "draw") {
-        const resultType = outcome.winner === 1 ? "win" : "draw";
+      if (outcome.winner === humanSide || outcome.winner === "draw") {
+        const resultType = outcome.winner === humanSide ? "win" : "draw";
         const outcomeLabel =
           resultType === "win"
-            ? `Checkmated ${activeCharacter.name}`
+            ? `Checkmated ${activeCharacter.name} as ${humanSide === 1 ? "White" : "Black"}`
             : "Honourable draw";
         const shareText = buildChessShareCard({
           dateLabel: formatShortBritishDate(todayKey),
@@ -533,9 +551,17 @@ export function ChessGame() {
         );
       }
     } else if (mode === "2p") {
+      const winningHuman =
+        outcome.winner === 1
+          ? whiteOwnerIn2P
+          : outcome.winner === 2
+            ? whiteOwnerIn2P === 1
+              ? 2
+              : 1
+            : null;
       setTwoPlayerScore((prev) => ({
-        p1: prev.p1 + (outcome.winner === 1 ? 1 : 0),
-        p2: prev.p2 + (outcome.winner === 2 ? 1 : 0),
+        p1: prev.p1 + (winningHuman === 1 ? 1 : 0),
+        p2: prev.p2 + (winningHuman === 2 ? 1 : 0),
         draws: prev.draws + (outcome.winner === "draw" ? 1 : 0),
       }));
     } else {
@@ -546,6 +572,7 @@ export function ChessGame() {
     activeCharacter.name,
     activeOpponent,
     elapsedSeconds,
+    humanSide,
     isFinished,
     matchNonce,
     materialInfo.capturedByBlack.length,
@@ -555,11 +582,12 @@ export function ChessGame() {
     pushToast,
     todayKey,
     turns,
+    whiteOwnerIn2P,
   ]);
 
-  // Execute Bot turn cleanly using latest state ref
+  // Execute Bot turn cleanly using latest state ref (plays White if human chose Black, or Black if human chose White)
   useEffect(() => {
-    if (activeOpponent !== "bot" || currentPlayer !== 2 || isFinished) {
+    if (activeOpponent !== "bot" || currentPlayer !== botSide || isFinished) {
       return;
     }
 
@@ -587,13 +615,34 @@ export function ChessGame() {
       window.clearTimeout(thinkTimer);
       setBotThinking(false);
     };
-  }, [activeOpponent, commitMove, currentPlayer, isFinished, matchNonce]);
+  }, [activeOpponent, botSide, commitMove, currentPlayer, isFinished, matchNonce]);
+
+  const handleSelectHumanSide = (nextSide: ChessPlayer) => {
+    if (nextSide === humanSide) return;
+    soundEngine.playPickup();
+    setHumanSide(nextSide);
+    resetBoard(false);
+  };
+
+  const handleSelectWhiteOwnerIn2P = (owner: 1 | 2) => {
+    if (owner === whiteOwnerIn2P) return;
+    soundEngine.playPickup();
+    setWhiteOwnerIn2P(owner);
+    resetBoard(false);
+  };
 
   const canHumanInteract =
     !isFinished &&
     !botThinking &&
     !pendingPromotion &&
-    (activeOpponent === "local" || currentPlayer === 1);
+    (activeOpponent === "local" || currentPlayer === humanSide);
+
+  const canUndo =
+    !botThinking &&
+    (Boolean(pendingPromotion) ||
+      (activeOpponent === "local"
+        ? undoStack.length > 0
+        : undoStack.some((s) => s.state.turn === humanSide)));
 
   const handleSquareClick = (row: number, col: number) => {
     if (!canHumanInteract) return;
@@ -659,28 +708,55 @@ export function ChessGame() {
     }
     if (undoStack.length === 0) return;
 
-    // In bot mode, unwind back to Player 1's most recent turn
+    // In bot mode, unwind back to the human's most recent turn
     let targetIdx = undoStack.length - 1;
     if (activeOpponent === "bot") {
-      while (targetIdx > 0 && undoStack[targetIdx].state.turn === 2) {
+      while (targetIdx > 0 && undoStack[targetIdx].state.turn === botSide) {
         targetIdx--;
       }
+      if (undoStack[targetIdx].state.turn !== humanSide) return;
     }
 
     const snap = undoStack[targetIdx];
+    const changedIds: string[] = [];
+    for (let r = 0; r < BOARD_SIZE; r++) {
+      for (let c = 0; c < BOARD_SIZE; c++) {
+        const prevCell = snap.state.board[r][c];
+        const currCell = chessState.board[r][c];
+        if (prevCell && prevCell.id !== currCell?.id) {
+          changedIds.push(prevCell.id);
+        }
+      }
+    }
+
     soundEngine.playPickup();
     setChessState(snap.state);
     setPositionCounts(snap.positionCounts);
     setLastMoveFrom(snap.lastMoveFrom);
     setLastMoveTo(snap.lastMoveTo);
+    setMovingPieceIds(changedIds);
     setTurns(snap.turns);
     setUndoStack(undoStack.slice(0, targetIdx));
     setSelectedSquare(null);
     setPendingPromotion(null);
   };
 
-  const p1Label = activeOpponent === "bot" ? "You" : "Player 1";
-  const p2Label = activeOpponent === "bot" ? activeCharacter.name : "Player 2";
+  const whiteLabel =
+    activeOpponent === "bot"
+      ? humanSide === 1
+        ? "You"
+        : activeCharacter.name
+      : whiteOwnerIn2P === 1
+        ? "Player 1"
+        : "Player 2";
+  const blackLabel =
+    activeOpponent === "bot"
+      ? humanSide === 2
+        ? "You"
+        : activeCharacter.name
+      : whiteOwnerIn2P === 1
+        ? "Player 2"
+        : "Player 1";
 
   const outcomeTitle = useMemo(() => {
     if (outcome.winner === "draw") {
@@ -691,15 +767,31 @@ export function ChessGame() {
       return "Draw by 50-move rule.";
     }
     if (outcome.winner === 1) {
-      return activeOpponent === "bot" ? "Checkmate — you win." : "Player 1 wins!";
+      if (activeOpponent === "bot") {
+        return humanSide === 1
+          ? "Checkmate — you win."
+          : `Checkmate — ${activeCharacter.name} wins.`;
+      }
+      return `${whiteLabel} wins!`;
     }
     if (outcome.winner === 2) {
-      return activeOpponent === "bot"
-        ? `Checkmate — ${activeCharacter.name} wins.`
-        : "Player 2 wins!";
+      if (activeOpponent === "bot") {
+        return humanSide === 2
+          ? "Checkmate — you win."
+          : `Checkmate — ${activeCharacter.name} wins.`;
+      }
+      return `${blackLabel} wins!`;
     }
     return "";
-  }, [activeCharacter.name, activeOpponent, outcome.reason, outcome.winner]);
+  }, [
+    activeCharacter.name,
+    activeOpponent,
+    blackLabel,
+    humanSide,
+    outcome.reason,
+    outcome.winner,
+    whiteLabel,
+  ]);
 
   const outcomeDetail = useMemo(() => {
     if (outcome.reason === "checkmate") return "King has no escape";
@@ -798,9 +890,10 @@ export function ChessGame() {
                 </DialogDescription>
                 <ul className="mt-4 space-y-2.5 text-sm text-[var(--sys-color-text-secondary)] list-disc pl-5">
                   <li>
-                    <strong>Familiar pieces:</strong> Smooth ivory tokens play as
-                    White from the bottom; grooved charcoal tokens play as Black
-                    from the top.
+                    <strong>White always moves first:</strong> Smooth ivory
+                    tokens play as White and grooved charcoal tokens play as
+                    Black. Choose whether to move first as White or second as
+                    Black above the board.
                   </li>
                   <li>
                     <strong>Complete rules:</strong> Includes castling, en passant
@@ -830,6 +923,101 @@ export function ChessGame() {
             aria-label="Chess 8 by 8 board"
             className="flex flex-col items-center w-full"
           >
+            {/* First-Move / Side Choice Bar — White Always Moves First */}
+            <div className="w-full max-w-[540px] flex flex-wrap items-center justify-between gap-2 mb-3 px-1">
+              <span className="text-xs text-[var(--sys-color-text-secondary)]">
+                White always moves first
+              </span>
+
+              {activeOpponent === "bot" ? (
+                <div
+                  role="group"
+                  aria-label="Choose whether to move first as White or second as Black"
+                  className="inline-flex items-center p-0.5 rounded-xl bg-[var(--sys-color-surface-container)] border border-[var(--sys-color-border-subtle)]"
+                >
+                  <button
+                    type="button"
+                    aria-pressed={humanSide === 1}
+                    onClick={() => handleSelectHumanSide(1)}
+                    className={`min-h-[32px] px-2.5 py-1 rounded-[10px] text-xs font-medium transition-colors cursor-pointer inline-flex items-center gap-1.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--sys-color-border-focus)] ${
+                      humanSide === 1
+                        ? "bg-[var(--sys-color-surface-lowest)] text-[var(--sys-color-text-primary)] shadow-[0_1px_2px_rgba(0,0,0,0.08)]"
+                        : "text-[var(--sys-color-text-secondary)] hover:text-[var(--sys-color-text-primary)]"
+                    }`}
+                  >
+                    <span
+                      aria-hidden="true"
+                      className="w-4 h-4 rounded-full bg-[var(--sys-color-surface-lowest)] text-[var(--sys-color-text-primary)] border border-[var(--sys-color-text-primary)] flex items-center justify-center text-[10px] leading-none"
+                    >
+                      {PIECE_GLYPHS.k}
+                    </span>
+                    <span>Move first · White</span>
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={humanSide === 2}
+                    onClick={() => handleSelectHumanSide(2)}
+                    className={`min-h-[32px] px-2.5 py-1 rounded-[10px] text-xs font-medium transition-colors cursor-pointer inline-flex items-center gap-1.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--sys-color-border-focus)] ${
+                      humanSide === 2
+                        ? "bg-[var(--sys-color-surface-lowest)] text-[var(--sys-color-text-primary)] shadow-[0_1px_2px_rgba(0,0,0,0.08)]"
+                        : "text-[var(--sys-color-text-secondary)] hover:text-[var(--sys-color-text-primary)]"
+                    }`}
+                  >
+                    <span
+                      aria-hidden="true"
+                      className="w-4 h-4 rounded-full bg-[var(--sys-color-text-primary)] text-[var(--sys-color-surface-lowest)] border border-[var(--sys-color-text-primary)] flex items-center justify-center text-[10px] leading-none"
+                    >
+                      {PIECE_GLYPHS.k}
+                    </span>
+                    <span>Move second · Black</span>
+                  </button>
+                </div>
+              ) : (
+                <div
+                  role="group"
+                  aria-label="Choose which player moves first as White"
+                  className="inline-flex items-center p-0.5 rounded-xl bg-[var(--sys-color-surface-container)] border border-[var(--sys-color-border-subtle)]"
+                >
+                  <button
+                    type="button"
+                    aria-pressed={whiteOwnerIn2P === 1}
+                    onClick={() => handleSelectWhiteOwnerIn2P(1)}
+                    className={`min-h-[32px] px-2.5 py-1 rounded-[10px] text-xs font-medium transition-colors cursor-pointer inline-flex items-center gap-1.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--sys-color-border-focus)] ${
+                      whiteOwnerIn2P === 1
+                        ? "bg-[var(--sys-color-surface-lowest)] text-[var(--sys-color-text-primary)] shadow-[0_1px_2px_rgba(0,0,0,0.08)]"
+                        : "text-[var(--sys-color-text-secondary)] hover:text-[var(--sys-color-text-primary)]"
+                    }`}
+                  >
+                    <span
+                      aria-hidden="true"
+                      className="w-4 h-4 rounded-full bg-[var(--sys-color-surface-lowest)] text-[var(--sys-color-text-primary)] border border-[var(--sys-color-text-primary)] flex items-center justify-center text-[10px] leading-none"
+                    >
+                      {PIECE_GLYPHS.k}
+                    </span>
+                    <span>Player 1 · White</span>
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={whiteOwnerIn2P === 2}
+                    onClick={() => handleSelectWhiteOwnerIn2P(2)}
+                    className={`min-h-[32px] px-2.5 py-1 rounded-[10px] text-xs font-medium transition-colors cursor-pointer inline-flex items-center gap-1.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--sys-color-border-focus)] ${
+                      whiteOwnerIn2P === 2
+                        ? "bg-[var(--sys-color-surface-lowest)] text-[var(--sys-color-text-primary)] shadow-[0_1px_2px_rgba(0,0,0,0.08)]"
+                        : "text-[var(--sys-color-text-secondary)] hover:text-[var(--sys-color-text-primary)]"
+                    }`}
+                  >
+                    <span
+                      aria-hidden="true"
+                      className="w-4 h-4 rounded-full bg-[var(--sys-color-surface-lowest)] text-[var(--sys-color-text-primary)] border border-[var(--sys-color-text-primary)] flex items-center justify-center text-[10px] leading-none"
+                    >
+                      {PIECE_GLYPHS.k}
+                    </span>
+                    <span>Player 2 · White</span>
+                  </button>
+                </div>
+              )}
+            </div>
+
             {/* Quiet Contextual Turn Prompt */}
             <div className="w-full max-w-[540px] flex items-center justify-between mb-2.5 px-1 text-xs text-[var(--sys-color-text-secondary)]">
               <span className="font-medium text-[var(--sys-color-text-primary)]">
@@ -840,8 +1028,10 @@ export function ChessGame() {
                     : botThinking
                       ? `${activeCharacter.name} is thinking…`
                       : kingInCheck
-                        ? `Check — ${currentPlayer === 1 ? p1Label : p2Label}'s King is under attack`
-                        : `${currentPlayer === 1 ? p1Label : p2Label}'s turn`}
+                        ? `Check — ${currentPlayer === 1 ? whiteLabel : blackLabel}'s King is under attack`
+                        : activeOpponent === "bot" && currentPlayer === humanSide
+                          ? `Your turn · ${humanSide === 1 ? "White" : "Black"}`
+                          : `${currentPlayer === 1 ? whiteLabel : blackLabel}'s turn · ${currentPlayer === 1 ? "White" : "Black"}`}
               </span>
               <span className="font-mono tabular-nums text-[var(--sys-color-text-muted)]">
                 Move {chessState.fullMoveNumber}
@@ -896,151 +1086,242 @@ export function ChessGame() {
             >
               {/* Architectural Matte Board Frame — Exact Draughts Board Theme */}
               <div className="rounded-[20px] sm:rounded-[24px] bg-[var(--sys-color-surface-container)] border border-[var(--sys-color-border-subtle)] p-2 sm:p-3.5 shadow-[0_14px_34px_-18px_rgba(0,0,0,0.22)]">
-                <div className="grid grid-cols-8 grid-rows-8 aspect-square w-full overflow-hidden rounded-[12px] sm:rounded-[14px] border border-[var(--sys-color-border-subtle)]">
-                  {Array.from({ length: BOARD_SIZE }).map((_, displayRowIdx) => {
-                    const row = isBoardFlipped
-                      ? BOARD_SIZE - 1 - displayRowIdx
-                      : displayRowIdx;
-                    return Array.from({ length: BOARD_SIZE }).map(
-                      (__, displayColIdx) => {
-                        const col = isBoardFlipped
-                          ? BOARD_SIZE - 1 - displayColIdx
-                          : displayColIdx;
-                        const darkSq = isDarkSquare(row, col);
-                        const cell = chessState.board[row][col];
-                        const sqKey = `${row},${col}`;
+                <div className="relative aspect-square w-full rounded-[12px] sm:rounded-[14px] border border-[var(--sys-color-border-subtle)]">
+                  {/* Layer 1: Interactive 8×8 Checkerboard Grid */}
+                  <div className="grid grid-cols-8 grid-rows-8 w-full h-full overflow-hidden rounded-[12px] sm:rounded-[14px]">
+                    {Array.from({ length: BOARD_SIZE }).map(
+                      (_, displayRowIdx) => {
+                        const row = isBoardFlipped
+                          ? BOARD_SIZE - 1 - displayRowIdx
+                          : displayRowIdx;
+                        return Array.from({ length: BOARD_SIZE }).map(
+                          (__, displayColIdx) => {
+                            const col = isBoardFlipped
+                              ? BOARD_SIZE - 1 - displayColIdx
+                              : displayColIdx;
+                            const darkSq = isDarkSquare(row, col);
+                            const cell = chessState.board[row][col];
+                            const sqKey = `${row},${col}`;
 
-                        const isSelected =
-                          selectedSquare !== null &&
-                          selectedSquare.row === row &&
-                          selectedSquare.col === col;
+                            const targetMoves = validTargets.get(sqKey);
+                            const isTarget = Boolean(
+                              targetMoves && targetMoves.length > 0
+                            );
+                            const isCaptureTarget = Boolean(
+                              targetMoves && targetMoves[0].captured !== null
+                            );
 
-                        const targetMoves = validTargets.get(sqKey);
-                        const isTarget = Boolean(
-                          targetMoves && targetMoves.length > 0
-                        );
-                        const isCaptureTarget = Boolean(
-                          targetMoves && targetMoves[0].captured !== null
-                        );
+                            const isLastSquare =
+                              (lastMoveFrom?.row === row &&
+                                lastMoveFrom?.col === col) ||
+                              (lastMoveTo?.row === row &&
+                                lastMoveTo?.col === col);
 
-                        const isLastSquare =
-                          (lastMoveFrom?.row === row &&
-                            lastMoveFrom?.col === col) ||
-                          (lastMoveTo?.row === row && lastMoveTo?.col === col);
+                            const canClick =
+                              canHumanInteract &&
+                              (isTarget ||
+                                (cell !== null &&
+                                  cell.player === currentPlayer));
 
-                        const isKingCheckedHere =
-                          kingInCheck &&
-                          cell !== null &&
-                          cell.player === currentPlayer &&
-                          cell.type === "k";
+                            const coordLabel = `${FILE_LABELS[col]}${BOARD_SIZE - row}`;
 
-                        const winOrder = cell
-                          ? winnerPieceOrder.get(cell.id)
-                          : undefined;
-                        const isWinnerPiece = winOrder !== undefined;
-
-                        const canClick =
-                          canHumanInteract &&
-                          (isTarget ||
-                            (cell !== null && cell.player === currentPlayer));
-
-                        const coordLabel = `${FILE_LABELS[col]}${BOARD_SIZE - row}`;
-
-                        return (
-                          <button
-                            key={sqKey}
-                            type="button"
-                            draggable={false}
-                            disabled={!canHumanInteract}
-                            onContextMenu={(e) => e.preventDefault()}
-                            onClick={() => handleSquareClick(row, col)}
-                            aria-label={`Square ${coordLabel}${
-                              cell
-                                ? `, ${cell.player === 1 ? p1Label : p2Label} ${
-                                    PIECE_NAMES[cell.type]
-                                  }`
-                                : ""
-                            }${
-                              isCaptureTarget
-                                ? ", capture destination"
-                                : isTarget
-                                  ? ", legal move destination"
-                                  : ""
-                            }`}
-                            className={`relative aspect-square flex items-center justify-center transition-colors duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--sys-color-border-focus)] ${
-                              isLastSquare
-                                ? "bg-[var(--sys-color-bg-surface-active)]"
-                                : darkSq
-                                  ? "bg-[var(--sys-color-surface-high)]"
-                                  : "bg-[var(--sys-color-surface-lowest)]"
-                            } ${canClick ? "cursor-pointer" : "cursor-default"}`}
-                          >
-                            {/* Subtle edge rank/file labels on desktop */}
-                            {displayColIdx === 0 && (
-                              <span
-                                aria-hidden="true"
-                                className="hidden sm:block pointer-events-none absolute top-0.5 left-1 font-mono text-[9px] leading-none text-[var(--sys-color-text-muted)]/70"
-                              >
-                                {BOARD_SIZE - row}
-                              </span>
-                            )}
-                            {displayRowIdx === BOARD_SIZE - 1 && (
-                              <span
-                                aria-hidden="true"
-                                className="hidden sm:block pointer-events-none absolute bottom-0.5 right-1 font-mono text-[9px] leading-none text-[var(--sys-color-text-muted)]/70"
-                              >
-                                {FILE_LABELS[col]}
-                              </span>
-                            )}
-
-                            {/* Legal Quiet Destination Indicator (Non-colour geometric target) */}
-                            {isTarget && !cell && (
-                              <motion.span
-                                initial={
-                                  prefersReducedMotion
-                                    ? false
-                                    : { scale: 0.6, opacity: 0 }
-                                }
-                                animate={{ scale: 1, opacity: 1 }}
-                                transition={{ duration: 0.14 }}
-                                aria-hidden="true"
-                                className={`pointer-events-none rounded-full flex items-center justify-center ${
+                            return (
+                              <button
+                                key={sqKey}
+                                type="button"
+                                draggable={false}
+                                disabled={!canHumanInteract}
+                                onContextMenu={(e) => e.preventDefault()}
+                                onClick={() => handleSquareClick(row, col)}
+                                aria-label={`Square ${coordLabel}${
+                                  cell
+                                    ? `, ${cell.player === 1 ? whiteLabel : blackLabel} ${
+                                        PIECE_NAMES[cell.type]
+                                      }`
+                                    : ""
+                                }${
                                   isCaptureTarget
-                                    ? "w-[58%] h-[58%] border-2 border-[var(--sys-color-text-primary)] bg-[var(--sys-color-surface-lowest)]/75"
-                                    : "w-[34%] h-[34%] border-2 border-dashed border-[var(--sys-color-text-primary)]/70 bg-[var(--sys-color-surface-lowest)]/60"
+                                    ? ", capture destination"
+                                    : isTarget
+                                      ? ", legal move destination"
+                                      : ""
                                 }`}
+                                className={`relative aspect-square flex items-center justify-center transition-colors duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--sys-color-border-focus)] ${
+                                  isLastSquare
+                                    ? "bg-[var(--sys-color-bg-surface-active)]"
+                                    : darkSq
+                                      ? "bg-[var(--sys-color-surface-high)]"
+                                      : "bg-[var(--sys-color-surface-lowest)]"
+                                } ${canClick ? "cursor-pointer" : "cursor-default"}`}
                               >
-                                {isCaptureTarget && (
-                                  <span className="w-[38%] h-[38%] rounded-full bg-[var(--sys-color-text-primary)]" />
+                                {/* Subtle edge rank/file labels on desktop */}
+                                {displayColIdx === 0 && (
+                                  <span
+                                    aria-hidden="true"
+                                    className="hidden sm:block pointer-events-none absolute top-0.5 left-1 font-mono text-[9px] leading-none text-[var(--sys-color-text-muted)]/70"
+                                  >
+                                    {BOARD_SIZE - row}
+                                  </span>
                                 )}
-                              </motion.span>
-                            )}
+                                {displayRowIdx === BOARD_SIZE - 1 && (
+                                  <span
+                                    aria-hidden="true"
+                                    className="hidden sm:block pointer-events-none absolute bottom-0.5 right-1 font-mono text-[9px] leading-none text-[var(--sys-color-text-muted)]/70"
+                                  >
+                                    {FILE_LABELS[col]}
+                                  </span>
+                                )}
 
-                            {/* Capture Target Ring around Enemy Piece */}
-                            {isTarget && cell && (
-                              <span
-                                aria-hidden="true"
-                                className="pointer-events-none absolute inset-[3px] rounded-full border-2 border-[var(--sys-color-text-primary)] z-20"
-                              />
-                            )}
+                                {/* Legal Quiet / En Passant Destination Indicator */}
+                                {isTarget && !cell && (
+                                  <motion.span
+                                    initial={
+                                      prefersReducedMotion
+                                        ? false
+                                        : { scale: 0.6, opacity: 0 }
+                                    }
+                                    animate={{ scale: 1, opacity: 1 }}
+                                    transition={{ duration: 0.14 }}
+                                    aria-hidden="true"
+                                    className={`pointer-events-none rounded-full flex items-center justify-center ${
+                                      isCaptureTarget
+                                        ? "w-[58%] h-[58%] border-2 border-[var(--sys-color-text-primary)] bg-[var(--sys-color-surface-lowest)]/75"
+                                        : "w-[34%] h-[34%] border-2 border-dashed border-[var(--sys-color-text-primary)]/70 bg-[var(--sys-color-surface-lowest)]/60"
+                                    }`}
+                                  >
+                                    {isCaptureTarget && (
+                                      <span className="w-[38%] h-[38%] rounded-full bg-[var(--sys-color-text-primary)]" />
+                                    )}
+                                  </motion.span>
+                                )}
+                              </button>
+                            );
+                          }
+                        );
+                      }
+                    )}
+                  </div>
 
-                            {/* Tactile Monochrome Chess Piece Token */}
-                            {cell && (
+                  {/* Layer 2: GPU-Composited Piece Overlay Layer (zero clipping, silky 60/120fps transform glide) */}
+                  <div
+                    key={`pieces-${matchNonce}-${isBoardFlipped ? "f" : "n"}`}
+                    aria-hidden="true"
+                    className="pointer-events-none absolute inset-0 z-10"
+                  >
+                    <AnimatePresence initial={false}>
+                      {chessState.board.flatMap((rowArr, row) =>
+                        rowArr.flatMap((cell, col) => {
+                          if (!cell) return [];
+                          const displayRow = isBoardFlipped
+                            ? BOARD_SIZE - 1 - row
+                            : row;
+                          const displayCol = isBoardFlipped
+                            ? BOARD_SIZE - 1 - col
+                            : col;
+                          const sqKey = `${row},${col}`;
+
+                          const isSelected =
+                            selectedSquare !== null &&
+                            selectedSquare.row === row &&
+                            selectedSquare.col === col;
+
+                          const targetMoves = validTargets.get(sqKey);
+                          const isCaptureRingTarget = Boolean(
+                            targetMoves && targetMoves.length > 0
+                          );
+
+                          const isKingCheckedHere =
+                            kingInCheck &&
+                            cell.player === currentPlayer &&
+                            cell.type === "k";
+
+                          const winOrder = winnerPieceOrder.get(cell.id);
+                          const isWinnerPiece = winOrder !== undefined;
+                          const isMovingPiece = movingPieceIds.includes(
+                            cell.id
+                          );
+
+                          return [
+                            <motion.div
+                              key={cell.id}
+                              initial={false}
+                              animate={{
+                                x: `${displayCol * 100}%`,
+                                y: `${displayRow * 100}%`,
+                                scale: 1,
+                                opacity: 1,
+                              }}
+                              exit={
+                                prefersReducedMotion
+                                  ? {
+                                      opacity: 0,
+                                      transition: { duration: 0.01 },
+                                    }
+                                  : {
+                                      scale: 0.48,
+                                      opacity: 0,
+                                      transition: {
+                                        duration: 0.18,
+                                        ease: [0.4, 0, 1, 1],
+                                      },
+                                    }
+                              }
+                              transition={
+                                prefersReducedMotion
+                                  ? { duration: 0.01 }
+                                  : {
+                                      x: {
+                                        type: "spring",
+                                        stiffness: 290,
+                                        damping: 27,
+                                        mass: 0.78,
+                                      },
+                                      y: {
+                                        type: "spring",
+                                        stiffness: 290,
+                                        damping: 27,
+                                        mass: 0.78,
+                                      },
+                                      scale: { duration: 0.18 },
+                                      opacity: { duration: 0.18 },
+                                    }
+                              }
+                              style={{
+                                zIndex: isSelected
+                                  ? 40
+                                  : isMovingPiece
+                                    ? 30
+                                    : 10,
+                                willChange: "transform",
+                              }}
+                              className="absolute top-0 left-0 w-[12.5%] h-[12.5%] flex items-center justify-center pointer-events-none"
+                            >
+                              {isCaptureRingTarget && (
+                                <motion.span
+                                  initial={
+                                    prefersReducedMotion
+                                      ? false
+                                      : { scale: 0.82, opacity: 0 }
+                                  }
+                                  animate={{ scale: 1, opacity: 1 }}
+                                  transition={{ duration: 0.14 }}
+                                  className="pointer-events-none absolute inset-[3px] rounded-full border-2 border-[var(--sys-color-text-primary)] z-20"
+                                />
+                              )}
                               <ChessToken
                                 piece={cell}
                                 isSelected={isSelected}
                                 isInCheckKing={isKingCheckedHere}
                                 isWinnerPiece={isWinnerPiece}
                                 winOrder={winOrder}
-                                layoutPrefix={`${matchNonce}-${isBoardFlipped ? "f" : "n"}`}
                                 reducedMotion={prefersReducedMotion}
                               />
-                            )}
-                          </button>
-                        );
-                      }
-                    );
-                  })}
+                            </motion.div>,
+                          ];
+                        })
+                      )}
+                    </AnimatePresence>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1140,7 +1421,7 @@ export function ChessGame() {
               </div>
 
               <div className="space-y-2">
-                {/* Player 1 (Ivory / White) */}
+                {/* White (Ivory — Always Moves First) */}
                 <div
                   className={`flex items-center justify-between gap-3 p-2.5 rounded-xl border transition-colors ${
                     !isFinished && currentPlayer === 1
@@ -1149,16 +1430,33 @@ export function ChessGame() {
                   }`}
                 >
                   <div className="flex items-center gap-2.5 min-w-0">
-                    <ChessToken
-                      piece={{ id: "legend-w", player: 1, type: "k" }}
-                      size="badge"
-                    />
+                    {activeOpponent === "bot" && botSide === 1 ? (
+                      <span className="relative w-9 h-9 rounded-full bg-[var(--sys-color-surface-lowest)] text-[var(--sys-color-text-primary)] border-2 border-[var(--sys-color-text-primary)] shadow-[inset_0_2px_0_var(--sys-specular-top)] flex items-center justify-center shrink-0">
+                        <span
+                          aria-hidden="true"
+                          className="pointer-events-none absolute inset-[3px] rounded-full border border-[var(--sys-color-text-primary)]/18"
+                        />
+                        <CharacterIcon
+                          iconKey={activeCharacter.iconKey}
+                          className="w-4 h-4 relative z-10"
+                        />
+                      </span>
+                    ) : (
+                      <ChessToken
+                        piece={{ id: "legend-w", player: 1, type: "k" }}
+                        size="badge"
+                      />
+                    )}
                     <div className="min-w-0">
                       <div className="text-sm font-medium text-[var(--sys-color-text-primary)] truncate">
-                        {p1Label} · Ivory
+                        {whiteLabel} · White
                       </div>
                       <div className="text-xs text-[var(--sys-color-text-muted)] truncate">
-                        {materialInfo.capturedByWhite.length > 0 ? (
+                        {activeOpponent === "bot" &&
+                        botSide === 1 &&
+                        botThinking ? (
+                          "Thinking…"
+                        ) : materialInfo.capturedByWhite.length > 0 ? (
                           <span className="tracking-tight text-[var(--sys-color-text-secondary)]">
                             {materialInfo.capturedByWhite
                               .map((t) => PIECE_GLYPHS[t])
@@ -1166,7 +1464,7 @@ export function ChessGame() {
                           </span>
                         ) : (
                           <span className="font-mono tabular-nums">
-                            {materialInfo.whiteCount} pieces
+                            {materialInfo.whiteCount} pieces · Moves 1st
                           </span>
                         )}
                       </div>
@@ -1179,7 +1477,7 @@ export function ChessGame() {
                   )}
                 </div>
 
-                {/* Player 2 (Charcoal / Black) */}
+                {/* Black (Charcoal — Moves Second) */}
                 <div
                   className={`flex items-center justify-between gap-3 p-2.5 rounded-xl border transition-colors ${
                     !isFinished && currentPlayer === 2
@@ -1188,7 +1486,7 @@ export function ChessGame() {
                   }`}
                 >
                   <div className="flex items-center gap-2.5 min-w-0">
-                    {activeOpponent === "bot" ? (
+                    {activeOpponent === "bot" && botSide === 2 ? (
                       <span className="relative w-9 h-9 rounded-full bg-[var(--sys-color-text-primary)] text-[var(--sys-color-surface-lowest)] border-2 border-[var(--sys-color-text-primary)] flex items-center justify-center shrink-0">
                         <span
                           aria-hidden="true"
@@ -1207,10 +1505,12 @@ export function ChessGame() {
                     )}
                     <div className="min-w-0">
                       <div className="text-sm font-medium text-[var(--sys-color-text-primary)] truncate">
-                        {p2Label} · Charcoal
+                        {blackLabel} · Black
                       </div>
                       <div className="text-xs text-[var(--sys-color-text-muted)] truncate">
-                        {botThinking ? (
+                        {activeOpponent === "bot" &&
+                        botSide === 2 &&
+                        botThinking ? (
                           "Thinking…"
                         ) : materialInfo.capturedByBlack.length > 0 ? (
                           <span className="tracking-tight text-[var(--sys-color-text-secondary)]">
@@ -1220,7 +1520,7 @@ export function ChessGame() {
                           </span>
                         ) : (
                           <span className="font-mono tabular-nums">
-                            {materialInfo.blackCount} pieces
+                            {materialInfo.blackCount} pieces · Moves 2nd
                           </span>
                         )}
                       </div>
@@ -1274,9 +1574,7 @@ export function ChessGame() {
                   variant="secondary"
                   size="sm"
                   onClick={handleUndo}
-                  disabled={
-                    (undoStack.length === 0 && !pendingPromotion) || botThinking
-                  }
+                  disabled={!canUndo}
                   className="flex-1"
                 >
                   <Undo2 className="w-4 h-4" />
@@ -1360,7 +1658,7 @@ export function ChessGame() {
                     Pass &amp; Play view
                   </h2>
                   <span className="text-xs text-[var(--sys-color-text-muted)]">
-                    {isBoardFlipped ? "Charcoal bottom" : "Ivory bottom"}
+                    {isBoardFlipped ? "Black bottom" : "White bottom"}
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
@@ -1402,8 +1700,9 @@ export function ChessGame() {
                 Tactile Chess
               </div>
               <p>
-                Tap any piece to view legal moves. Castling, en passant, and pawn
-                promotion are all active on the board.
+                White always moves first. Choose to move first with White or
+                second with Black — castling, en passant, and pawn promotion are
+                all active.
               </p>
             </div>
 

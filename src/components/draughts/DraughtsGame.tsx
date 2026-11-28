@@ -94,7 +94,6 @@ function DraughtsDisc({
   isMustCapture,
   isWinnerPiece,
   winOrder,
-  layoutPrefix,
   size = "board",
   reducedMotion = false,
 }: {
@@ -103,7 +102,6 @@ function DraughtsDisc({
   isMustCapture?: boolean;
   isWinnerPiece?: boolean;
   winOrder?: number;
-  layoutPrefix?: string;
   size?: "board" | "badge";
   reducedMotion?: boolean;
 }) {
@@ -115,26 +113,21 @@ function DraughtsDisc({
 
   return (
     <motion.div
-      layoutId={
-        size === "board" && !reducedMotion
-          ? `${layoutPrefix ?? "0"}-${piece.id}`
-          : undefined
+      transition={
+        reducedMotion
+          ? { duration: 0.01 }
+          : {
+              type: "spring",
+              stiffness: 380,
+              damping: 26,
+              delay: animateWin ? cascadeDelay : 0,
+            }
       }
-      transition={{
-        layout: {
-          type: "spring",
-          stiffness: 430,
-          damping: 32,
-          mass: 0.85,
-        },
-        duration: 0.45,
-        delay: animateWin ? cascadeDelay : 0,
-      }}
       animate={
         animateWin
           ? { scale: [1, 1.12, 1.03] }
           : isSelected
-            ? { scale: 1.07, y: -2 }
+            ? { scale: 1.08, y: -3 }
             : { scale: 1, y: 0 }
       }
       className={`relative rounded-full flex items-center justify-center select-none pointer-events-none ${sizeClass} ${
@@ -143,7 +136,7 @@ function DraughtsDisc({
           : "bg-[var(--sys-color-text-primary)] text-[var(--sys-color-surface-lowest)] border-2 border-[var(--sys-color-text-primary)] shadow-[inset_0_2px_4px_rgba(0,0,0,0.28),0_3px_6px_rgba(0,0,0,0.18)]"
       } ${
         isSelected
-          ? "ring-2 ring-offset-2 ring-[var(--sys-color-border-focus)] ring-offset-[var(--sys-color-surface-high)] z-20"
+          ? "ring-2 ring-offset-2 ring-[var(--sys-color-border-focus)] ring-offset-[var(--sys-color-surface-high)] shadow-[0_10px_20px_-6px_rgba(0,0,0,0.34)]"
           : ""
       }`}
     >
@@ -237,6 +230,7 @@ export function DraughtsGame() {
 
   const [lastMoveFrom, setLastMoveFrom] = useState<Coord | null>(null);
   const [lastMoveTo, setLastMoveTo] = useState<Coord | null>(null);
+  const [movingPieceIds, setMovingPieceIds] = useState<string[]>([]);
   const [quietPlies, setQuietPlies] = useState<number>(0);
   const [turns, setTurns] = useState<number>(0);
   const [undoStack, setUndoStack] = useState<TurnSnapshot[]>([]);
@@ -413,6 +407,7 @@ export function DraughtsGame() {
       setActiveChain(null);
       setLastMoveFrom(null);
       setLastMoveTo(null);
+      setMovingPieceIds([]);
       setQuietPlies(0);
       setTurns(0);
       setUndoStack([]);
@@ -566,6 +561,9 @@ export function DraughtsGame() {
           setBoard(boardSnapshotForStep);
           setLastMoveFrom(stepIdx === 0 ? chosen.from : stepFrom);
           setLastMoveTo(dest);
+          if (movingPiece) {
+            setMovingPieceIds([movingPiece.id]);
+          }
 
           if (promotedOnStep) {
             soundEngine.playLatch();
@@ -581,7 +579,7 @@ export function DraughtsGame() {
             setCurrentPlayer(1);
             setAnimatingBot(false);
           }
-        }, stepIdx * 280);
+        }, stepIdx * 320);
 
         botTimersRef.current.push(stepTimer);
       });
@@ -642,6 +640,9 @@ export function DraughtsGame() {
       setBoard(nextBoard);
       setLastMoveFrom(selectedSquare);
       setLastMoveTo(targetOption.to);
+      if (movingPiece) {
+        setMovingPieceIds([movingPiece.id]);
+      }
 
       const nextStepIdx = (activeChain ? activeChain.stepIndex : 0) + 1;
       const continuingMoves = targetOption.matchingMoves.filter(
@@ -740,6 +741,17 @@ export function DraughtsGame() {
     }
 
     const snap = undoStack[targetIdx];
+    const changedIds: string[] = [];
+    for (let r = 0; r < BOARD_SIZE; r++) {
+      for (let c = 0; c < BOARD_SIZE; c++) {
+        const prevCell = snap.board[r][c];
+        const currCell = board[r][c];
+        if (prevCell && prevCell.id !== currCell?.id) {
+          changedIds.push(prevCell.id);
+        }
+      }
+    }
+
     soundEngine.playPickup();
     setBoard(snap.board);
     setCurrentPlayer(snap.currentPlayer);
@@ -747,6 +759,7 @@ export function DraughtsGame() {
     setTurns(snap.turns);
     setLastMoveFrom(snap.lastMoveFrom);
     setLastMoveTo(snap.lastMoveTo);
+    setMovingPieceIds(changedIds);
     setUndoStack(undoStack.slice(0, targetIdx));
     setSelectedSquare(null);
     setActiveChain(null);
@@ -920,135 +933,225 @@ export function DraughtsGame() {
             >
               {/* Architectural Matte Board Frame */}
               <div className="rounded-[20px] sm:rounded-[24px] bg-[var(--sys-color-surface-container)] border border-[var(--sys-color-border-subtle)] p-2 sm:p-3.5 shadow-[0_14px_34px_-18px_rgba(0,0,0,0.22)]">
-                <div className="grid grid-cols-8 grid-rows-8 aspect-square w-full overflow-hidden rounded-[12px] sm:rounded-[14px] border border-[var(--sys-color-border-subtle)]">
-                  {Array.from({ length: BOARD_SIZE }).map((_, displayRowIdx) => {
-                    const row = isBoardFlipped
-                      ? BOARD_SIZE - 1 - displayRowIdx
-                      : displayRowIdx;
-                    return Array.from({ length: BOARD_SIZE }).map(
-                      (__, displayColIdx) => {
-                        const col = isBoardFlipped
-                          ? BOARD_SIZE - 1 - displayColIdx
-                          : displayColIdx;
-                        const playable = isPlayableSquare(row, col);
-                        const cell = board[row][col];
-                        const sqKey = `${row},${col}`;
+                <div className="relative aspect-square w-full rounded-[12px] sm:rounded-[14px] border border-[var(--sys-color-border-subtle)]">
+                  {/* Layer 1: Interactive 8×8 Checkerboard Grid */}
+                  <div className="grid grid-cols-8 grid-rows-8 w-full h-full overflow-hidden rounded-[12px] sm:rounded-[14px]">
+                    {Array.from({ length: BOARD_SIZE }).map(
+                      (_, displayRowIdx) => {
+                        const row = isBoardFlipped
+                          ? BOARD_SIZE - 1 - displayRowIdx
+                          : displayRowIdx;
+                        return Array.from({ length: BOARD_SIZE }).map(
+                          (__, displayColIdx) => {
+                            const col = isBoardFlipped
+                              ? BOARD_SIZE - 1 - displayColIdx
+                              : displayColIdx;
+                            const playable = isPlayableSquare(row, col);
+                            const cell = board[row][col];
+                            const sqKey = `${row},${col}`;
 
-                      const isSelected =
-                        selectedSquare !== null &&
-                        selectedSquare.row === row &&
-                        selectedSquare.col === col;
+                            const targetOption = validNextTargets.get(sqKey);
+                            const isTarget = Boolean(targetOption);
+                            const isCaptureTarget = Boolean(
+                              targetOption?.captured
+                            );
 
-                      const targetOption = validNextTargets.get(sqKey);
-                      const isTarget = Boolean(targetOption);
-                      const isCaptureTarget = Boolean(targetOption?.captured);
+                            const isLastSquare =
+                              (lastMoveFrom?.row === row &&
+                                lastMoveFrom?.col === col) ||
+                              (lastMoveTo?.row === row &&
+                                lastMoveTo?.col === col);
 
-                      const isMustCapturePiece =
-                        canHumanInteract &&
-                        hasMandatoryCapture &&
-                        movableOrigins.has(sqKey) &&
-                        cell?.player === currentPlayer;
+                            const canClick =
+                              canHumanInteract &&
+                              playable &&
+                              (isTarget ||
+                                (cell !== null &&
+                                  cell.player === currentPlayer));
 
-                      const isLastSquare =
-                        (lastMoveFrom?.row === row && lastMoveFrom?.col === col) ||
-                        (lastMoveTo?.row === row && lastMoveTo?.col === col);
+                            const coordLabel = `${FILE_LABELS[col]}${BOARD_SIZE - row}`;
 
-                      const winOrder = cell
-                        ? winnerPieceOrder.get(cell.id)
-                        : undefined;
-                      const isWinnerPiece = winOrder !== undefined;
+                            return (
+                              <button
+                                key={sqKey}
+                                type="button"
+                                draggable={false}
+                                disabled={!playable || !canHumanInteract}
+                                onContextMenu={(e) => e.preventDefault()}
+                                onClick={() => handleSquareClick(row, col)}
+                                aria-label={`Square ${coordLabel}${
+                                  cell
+                                    ? `, ${cell.player === 1 ? p1Label : p2Label} ${
+                                        cell.king ? "King" : "disc"
+                                      }`
+                                    : ""
+                                }${
+                                  isCaptureTarget
+                                    ? ", jump capture destination"
+                                    : isTarget
+                                      ? ", legal move destination"
+                                      : ""
+                                }`}
+                                className={`relative aspect-square flex items-center justify-center transition-colors duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--sys-color-border-focus)] ${
+                                  playable
+                                    ? isLastSquare
+                                      ? "bg-[var(--sys-color-bg-surface-active)]"
+                                      : "bg-[var(--sys-color-surface-high)]"
+                                    : "bg-[var(--sys-color-surface-lowest)]"
+                                } ${canClick ? "cursor-pointer" : "cursor-default"}`}
+                              >
+                                {/* Subtle edge rank/file labels on desktop */}
+                                {displayColIdx === 0 && (
+                                  <span
+                                    aria-hidden="true"
+                                    className="hidden sm:block pointer-events-none absolute top-0.5 left-1 font-mono text-[9px] leading-none text-[var(--sys-color-text-muted)]/70"
+                                  >
+                                    {BOARD_SIZE - row}
+                                  </span>
+                                )}
+                                {displayRowIdx === BOARD_SIZE - 1 && (
+                                  <span
+                                    aria-hidden="true"
+                                    className="hidden sm:block pointer-events-none absolute bottom-0.5 right-1 font-mono text-[9px] leading-none text-[var(--sys-color-text-muted)]/70"
+                                  >
+                                    {FILE_LABELS[col]}
+                                  </span>
+                                )}
 
-                      const canClick =
-                        canHumanInteract &&
-                        playable &&
-                        (isTarget ||
-                          (cell !== null && cell.player === currentPlayer));
+                                {/* Legal Destination Indicator (Non-colour geometric target) */}
+                                {isTarget && !cell && (
+                                  <motion.span
+                                    initial={
+                                      prefersReducedMotion
+                                        ? false
+                                        : { scale: 0.6, opacity: 0 }
+                                    }
+                                    animate={{ scale: 1, opacity: 1 }}
+                                    transition={{ duration: 0.14 }}
+                                    aria-hidden="true"
+                                    className={`pointer-events-none rounded-full flex items-center justify-center ${
+                                      isCaptureTarget
+                                        ? "w-[58%] h-[58%] border-2 border-[var(--sys-color-text-primary)] bg-[var(--sys-color-surface-lowest)]/75"
+                                        : "w-[36%] h-[36%] border-2 border-dashed border-[var(--sys-color-text-primary)]/70 bg-[var(--sys-color-surface-lowest)]/60"
+                                    }`}
+                                  >
+                                    {isCaptureTarget && (
+                                      <span className="w-[38%] h-[38%] rounded-full bg-[var(--sys-color-text-primary)]" />
+                                    )}
+                                  </motion.span>
+                                )}
+                              </button>
+                            );
+                          }
+                        );
+                      }
+                    )}
+                  </div>
 
-                      const coordLabel = `${FILE_LABELS[col]}${BOARD_SIZE - row}`;
+                  {/* Layer 2: GPU-Composited Disc Overlay Layer (zero clipping, silky 60/120fps glide & multi-jump hops) */}
+                  <div
+                    key={`discs-${matchNonce}-${isBoardFlipped ? "f" : "n"}`}
+                    aria-hidden="true"
+                    className="pointer-events-none absolute inset-0 z-10"
+                  >
+                    <AnimatePresence initial={false}>
+                      {board.flatMap((rowArr, row) =>
+                        rowArr.flatMap((cell, col) => {
+                          if (!cell) return [];
+                          const displayRow = isBoardFlipped
+                            ? BOARD_SIZE - 1 - row
+                            : row;
+                          const displayCol = isBoardFlipped
+                            ? BOARD_SIZE - 1 - col
+                            : col;
+                          const sqKey = `${row},${col}`;
 
-                      return (
-                        <button
-                          key={sqKey}
-                          type="button"
-                          draggable={false}
-                          disabled={!playable || !canHumanInteract}
-                          onContextMenu={(e) => e.preventDefault()}
-                          onClick={() => handleSquareClick(row, col)}
-                          aria-label={`Square ${coordLabel}${
-                            cell
-                              ? `, ${cell.player === 1 ? p1Label : p2Label} ${
-                                  cell.king ? "King" : "disc"
-                                }`
-                              : ""
-                          }${
-                            isCaptureTarget
-                              ? ", jump capture destination"
-                              : isTarget
-                                ? ", legal move destination"
-                                : ""
-                          }`}
-                          className={`relative aspect-square flex items-center justify-center transition-colors duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--sys-color-border-focus)] ${
-                            playable
-                              ? isLastSquare
-                                ? "bg-[var(--sys-color-bg-surface-active)]"
-                                : "bg-[var(--sys-color-surface-high)]"
-                              : "bg-[var(--sys-color-surface-lowest)]"
-                          } ${canClick ? "cursor-pointer" : "cursor-default"}`}
-                        >
-                          {/* Subtle edge rank/file labels on desktop */}
-                          {displayColIdx === 0 && (
-                            <span
-                              aria-hidden="true"
-                              className="hidden sm:block pointer-events-none absolute top-0.5 left-1 font-mono text-[9px] leading-none text-[var(--sys-color-text-muted)]/70"
+                          const isSelected =
+                            selectedSquare !== null &&
+                            selectedSquare.row === row &&
+                            selectedSquare.col === col;
+
+                          const isMustCapturePiece =
+                            canHumanInteract &&
+                            hasMandatoryCapture &&
+                            movableOrigins.has(sqKey) &&
+                            cell.player === currentPlayer;
+
+                          const winOrder = winnerPieceOrder.get(cell.id);
+                          const isWinnerPiece = winOrder !== undefined;
+                          const isMovingPiece = movingPieceIds.includes(
+                            cell.id
+                          );
+
+                          return [
+                            <motion.div
+                              key={cell.id}
+                              initial={false}
+                              animate={{
+                                x: `${displayCol * 100}%`,
+                                y: `${displayRow * 100}%`,
+                                scale: 1,
+                                opacity: 1,
+                              }}
+                              exit={
+                                prefersReducedMotion
+                                  ? {
+                                      opacity: 0,
+                                      transition: { duration: 0.01 },
+                                    }
+                                  : {
+                                      scale: 0.45,
+                                      opacity: 0,
+                                      transition: {
+                                        duration: 0.18,
+                                        ease: [0.4, 0, 1, 1],
+                                      },
+                                    }
+                              }
+                              transition={
+                                prefersReducedMotion
+                                  ? { duration: 0.01 }
+                                  : {
+                                      x: {
+                                        type: "spring",
+                                        stiffness: 290,
+                                        damping: 27,
+                                        mass: 0.78,
+                                      },
+                                      y: {
+                                        type: "spring",
+                                        stiffness: 290,
+                                        damping: 27,
+                                        mass: 0.78,
+                                      },
+                                      scale: { duration: 0.18 },
+                                      opacity: { duration: 0.18 },
+                                    }
+                              }
+                              style={{
+                                zIndex: isSelected
+                                  ? 40
+                                  : isMovingPiece
+                                    ? 30
+                                    : 10,
+                                willChange: "transform",
+                              }}
+                              className="absolute top-0 left-0 w-[12.5%] h-[12.5%] flex items-center justify-center pointer-events-none"
                             >
-                              {BOARD_SIZE - row}
-                            </span>
-                          )}
-                          {displayRowIdx === BOARD_SIZE - 1 && (
-                            <span
-                              aria-hidden="true"
-                              className="hidden sm:block pointer-events-none absolute bottom-0.5 right-1 font-mono text-[9px] leading-none text-[var(--sys-color-text-muted)]/70"
-                            >
-                              {FILE_LABELS[col]}
-                            </span>
-                          )}
-
-                          {/* Legal Destination Indicator (Non-colour geometric target) */}
-                          {isTarget && !cell && (
-                            <motion.span
-                              initial={prefersReducedMotion ? false : { scale: 0.6, opacity: 0 }}
-                              animate={{ scale: 1, opacity: 1 }}
-                              transition={{ duration: 0.14 }}
-                              aria-hidden="true"
-                              className={`pointer-events-none rounded-full flex items-center justify-center ${
-                                isCaptureTarget
-                                  ? "w-[58%] h-[58%] border-2 border-[var(--sys-color-text-primary)] bg-[var(--sys-color-surface-lowest)]/75"
-                                  : "w-[36%] h-[36%] border-2 border-dashed border-[var(--sys-color-text-primary)]/70 bg-[var(--sys-color-surface-lowest)]/60"
-                              }`}
-                            >
-                              {isCaptureTarget && (
-                                <span className="w-[38%] h-[38%] rounded-full bg-[var(--sys-color-text-primary)]" />
-                              )}
-                            </motion.span>
-                          )}
-
-                          {/* Tactile Monochrome Draughts Disc */}
-                          {cell && (
-                            <DraughtsDisc
-                              piece={cell}
-                              isSelected={isSelected}
-                              isMustCapture={isMustCapturePiece}
-                              isWinnerPiece={isWinnerPiece}
-                              winOrder={winOrder}
-                              layoutPrefix={`${matchNonce}-${isBoardFlipped ? "f" : "n"}`}
-                              reducedMotion={prefersReducedMotion}
-                            />
-                          )}
-                        </button>
-                      );
-                    }
-                  );
-                  })}
+                              <DraughtsDisc
+                                piece={cell}
+                                isSelected={isSelected}
+                                isMustCapture={isMustCapturePiece}
+                                isWinnerPiece={isWinnerPiece}
+                                winOrder={winOrder}
+                                reducedMotion={prefersReducedMotion}
+                              />
+                            </motion.div>,
+                          ];
+                        })
+                      )}
+                    </AnimatePresence>
+                  </div>
                 </div>
               </div>
             </div>
