@@ -560,3 +560,122 @@ export function recordChessZenCompletion(): ChessStats {
   return nextStats;
 }
 
+/* ---------- Cause & Effect Persistence ---------- */
+export interface CauseEffectCompletionRecord {
+  dateKey: string;
+  themeId: string;
+  score: number;
+  moves: number;
+  longestChain: number;
+  elapsedSeconds: number;
+  shareText: string;
+  completedAt: string;
+}
+
+export interface CauseEffectStats {
+  currentStreak: number;
+  bestStreak: number;
+  bestScore: number;
+  totalDailySolved: number;
+  totalZenPlayed: number;
+  lastCompletedDate: string | null;
+  history: Record<string, CauseEffectCompletionRecord>;
+}
+
+const CAUSE_EFFECT_STATS_KEY = "coffee-break:cause-and-effect:stats:v1";
+
+const DEFAULT_CAUSE_EFFECT_STATS: CauseEffectStats = {
+  currentStreak: 0,
+  bestStreak: 0,
+  bestScore: 0,
+  totalDailySolved: 0,
+  totalZenPlayed: 0,
+  lastCompletedDate: null,
+  history: {},
+};
+
+export function loadCauseEffectStats(): CauseEffectStats {
+  if (typeof window === "undefined") return DEFAULT_CAUSE_EFFECT_STATS;
+  try {
+    const raw = window.localStorage.getItem(CAUSE_EFFECT_STATS_KEY);
+    if (!raw) return DEFAULT_CAUSE_EFFECT_STATS;
+    const parsed = JSON.parse(raw) as Partial<CauseEffectStats>;
+    return {
+      ...DEFAULT_CAUSE_EFFECT_STATS,
+      ...parsed,
+      history: parsed.history ?? {},
+    };
+  } catch {
+    return DEFAULT_CAUSE_EFFECT_STATS;
+  }
+}
+
+export function recordCauseEffectDailyCompletion(
+  record: CauseEffectCompletionRecord
+): CauseEffectStats {
+  const stats = loadCauseEffectStats();
+  const alreadySolved = Boolean(stats.history[record.dateKey]);
+  const updatedHistory = {
+    ...stats.history,
+    [record.dateKey]: record,
+  };
+
+  let currentStreak = stats.currentStreak;
+  let totalDailySolved = stats.totalDailySolved;
+
+  if (!alreadySolved) {
+    totalDailySolved += 1;
+    const yesterday = getPreviousDateKey(record.dateKey);
+    if (stats.lastCompletedDate === yesterday) {
+      currentStreak = stats.currentStreak + 1;
+    } else if (stats.lastCompletedDate === record.dateKey) {
+      currentStreak = Math.max(1, stats.currentStreak);
+    } else {
+      currentStreak = 1;
+    }
+  }
+
+  const nextStats: CauseEffectStats = {
+    ...stats,
+    currentStreak,
+    bestStreak: Math.max(stats.bestStreak, currentStreak),
+    bestScore: Math.max(stats.bestScore, record.score),
+    totalDailySolved,
+    lastCompletedDate: record.dateKey,
+    history: updatedHistory,
+  };
+
+  if (typeof window !== "undefined") {
+    try {
+      window.localStorage.setItem(
+        CAUSE_EFFECT_STATS_KEY,
+        JSON.stringify(nextStats)
+      );
+    } catch {
+      // Ignore storage quota errors
+    }
+  }
+  return nextStats;
+}
+
+export function recordCauseEffectZenCompletion(score: number): CauseEffectStats {
+  const stats = loadCauseEffectStats();
+  const nextStats: CauseEffectStats = {
+    ...stats,
+    bestScore: Math.max(stats.bestScore, score),
+    totalZenPlayed: stats.totalZenPlayed + 1,
+  };
+  if (typeof window !== "undefined") {
+    try {
+      window.localStorage.setItem(
+        CAUSE_EFFECT_STATS_KEY,
+        JSON.stringify(nextStats)
+      );
+    } catch {
+      // Ignore storage quota errors
+    }
+  }
+  return nextStats;
+}
+
+

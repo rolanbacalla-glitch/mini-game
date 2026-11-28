@@ -11,8 +11,11 @@ import {
   Croissant,
   Crown,
   Flame,
+  Link2,
+  Lock,
   Sparkles,
   Users,
+  Zap,
 } from "lucide-react";
 import { TopBar } from "@/components/TopBar";
 import {
@@ -30,11 +33,13 @@ import {
 } from "@/lib/games";
 import {
   formatDuration,
+  loadCauseEffectStats,
   loadChessStats,
   loadChromaStats,
   loadDailyFourStats,
   loadDraughtsStats,
   loadLoomStats,
+  type CauseEffectStats,
   type ChessStats,
   type ChromaStats,
   type DailyFourStats,
@@ -244,11 +249,80 @@ function ChessPreviewGraphic() {
   );
 }
 
+function CauseEffectPreviewGraphic() {
+  return (
+    <div className="w-full h-36 rounded-xl bg-[var(--sys-color-surface-low)] border border-[var(--sys-color-border-subtle)] p-3 flex items-center justify-center">
+      <div className="flex items-center gap-2">
+        {/* Miniature Warm Amber Cause Card */}
+        <div
+          className="w-20 h-24 rounded-lg border-2 p-2 flex flex-col justify-between"
+          style={{
+            backgroundColor: "var(--card-cause-bg)",
+            borderColor: "var(--card-cause-border)",
+          }}
+        >
+          <span
+            className="inline-flex items-center gap-0.5 font-mono text-[8px] font-semibold uppercase tracking-wider"
+            style={{ color: "var(--card-cause-accent)" }}
+          >
+            <Zap className="w-2.5 h-2.5" aria-hidden="true" />
+            <span>CAUSE</span>
+          </span>
+          <span className="text-[10px] font-medium leading-tight text-[var(--sys-color-text-primary)]">
+            White light hits prism
+          </span>
+          <span
+            className="inline-flex items-center gap-0.5 font-mono text-[8px] font-semibold uppercase"
+            style={{ color: "var(--card-cause-accent)" }}
+          >
+            <Lock className="w-2 h-2" aria-hidden="true" />
+            <span>2x</span>
+          </span>
+        </div>
+
+        {/* Link Connector */}
+        <div className="flex flex-col items-center gap-1 text-[var(--sys-color-text-muted)]">
+          <Link2 className="w-4 h-4" aria-hidden="true" />
+          <span className="font-mono text-[9px] font-semibold">→</span>
+        </div>
+
+        {/* Miniature Cool Teal Effect Card */}
+        <div
+          className="w-20 h-24 rounded-lg border-2 p-2 flex flex-col justify-between"
+          style={{
+            backgroundColor: "var(--card-effect-bg)",
+            borderColor: "var(--card-effect-border)",
+          }}
+        >
+          <span
+            className="inline-flex items-center gap-0.5 font-mono text-[8px] font-semibold uppercase tracking-wider"
+            style={{ color: "var(--card-effect-accent)" }}
+          >
+            <Sparkles className="w-2.5 h-2.5" aria-hidden="true" />
+            <span>EFFECT</span>
+          </span>
+          <span className="text-[10px] font-medium leading-tight text-[var(--sys-color-text-primary)]">
+            Rainbow spectrum
+          </span>
+          <span
+            className="inline-flex items-center gap-0.5 font-mono text-[8px] font-semibold uppercase"
+            style={{ color: "var(--card-effect-accent)" }}
+          >
+            <Lock className="w-2 h-2" aria-hidden="true" />
+            <span>LOCK</span>
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function GamePreview({ id }: { id: string }) {
   if (id === "loom-and-latch") return <LoomPreviewGraphic />;
   if (id === "connect-4") return <Connect4PreviewGraphic />;
   if (id === "draughts") return <DraughtsPreviewGraphic />;
   if (id === "chess") return <ChessPreviewGraphic />;
+  if (id === "cause-and-effect") return <CauseEffectPreviewGraphic />;
   return <ChromaCalmPreviewGraphic />;
 }
 
@@ -260,6 +334,8 @@ export function HubClient() {
   const [chromaStats, setChromaStats] = useState<ChromaStats | null>(null);
   const [draughtsStats, setDraughtsStats] = useState<DraughtsStats | null>(null);
   const [chessStats, setChessStats] = useState<ChessStats | null>(null);
+  const [causeEffectStats, setCauseEffectStats] =
+    useState<CauseEffectStats | null>(null);
 
   useEffect(() => {
     const now = new Date();
@@ -270,6 +346,7 @@ export function HubClient() {
     setChromaStats(loadChromaStats());
     setDraughtsStats(loadDraughtsStats());
     setChessStats(loadChessStats());
+    setCauseEffectStats(loadCauseEffectStats());
   }, []);
 
   const todayLoom = todayKey && loomStats ? loomStats.history[todayKey] : undefined;
@@ -280,32 +357,40 @@ export function HubClient() {
     todayKey && draughtsStats ? draughtsStats.history[todayKey] : undefined;
   const todayChess =
     todayKey && chessStats ? chessStats.history[todayKey] : undefined;
+  const todayCauseEffect =
+    todayKey && causeEffectStats
+      ? causeEffectStats.history[todayKey]
+      : undefined;
   const liveGamesCount = GAMES.filter((g) => g.status === "live").length;
   const completedTodayCount =
     (todayLoom ? 1 : 0) +
     (todayFour ? 1 : 0) +
     (todayChroma ? 1 : 0) +
     (todayDraughts ? 1 : 0) +
-    (todayChess ? 1 : 0);
+    (todayChess ? 1 : 0) +
+    (todayCauseEffect ? 1 : 0);
   const topStreak = Math.max(
     loomStats?.currentStreak ?? 0,
     fourStats?.currentStreak ?? 0,
     chromaStats?.currentStreak ?? 0,
     draughtsStats?.currentStreak ?? 0,
-    chessStats?.currentStreak ?? 0
+    chessStats?.currentStreak ?? 0,
+    causeEffectStats?.currentStreak ?? 0
   );
   const totalDaily =
     (loomStats?.totalDailySolved ?? 0) +
     (fourStats?.totalDailySolved ?? 0) +
     (chromaStats?.totalDailySolved ?? 0) +
     (draughtsStats?.totalDailySolved ?? 0) +
-    (chessStats?.totalDailySolved ?? 0);
+    (chessStats?.totalDailySolved ?? 0) +
+    (causeEffectStats?.totalDailySolved ?? 0);
   const totalZen =
     (loomStats?.totalZenSolved ?? 0) +
     (fourStats?.totalZenPlayed ?? 0) +
     (chromaStats?.totalZenSolved ?? 0) +
     (draughtsStats?.totalZenPlayed ?? 0) +
-    (chessStats?.totalZenPlayed ?? 0);
+    (chessStats?.totalZenPlayed ?? 0) +
+    (causeEffectStats?.totalZenPlayed ?? 0);
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -374,7 +459,9 @@ export function HubClient() {
                         ? `${todayDraughts.turns} turns`
                         : game.id === "chess" && todayChess
                           ? `${todayChess.moves} moves`
-                          : null;
+                          : game.id === "cause-and-effect" && todayCauseEffect
+                            ? `${todayCauseEffect.score.toLocaleString()} pts`
+                            : null;
               const isSolvedToday = Boolean(solvedBadgeText);
 
               return (

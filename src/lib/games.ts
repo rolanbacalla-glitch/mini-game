@@ -72,6 +72,18 @@ export const GAMES: GameMeta[] = [
     restorativeBenefit: "Measured positional planning with crisp monochrome piece tokens and full rules.",
     accentColour: "var(--tile-ochre-fill)",
   },
+  {
+    id: "cause-and-effect",
+    slug: "/cause-and-effect",
+    title: "Cause & Effect",
+    subtitle: "Match asymmetrical Cause and Effect cards on a 4×5 grid to build cascading multiplier chains.",
+    duration: "2–4 mins",
+    supportsTwoPlayers: false,
+    status: "live",
+    statusLabel: "Play today's ritual",
+    restorativeBenefit: "Associative memory with crisp cause-and-effect links and streak reveals.",
+    accentColour: "var(--card-cause-border)",
+  },
 ];
 
 export function getTodayKey(date: Date = new Date()): string {
