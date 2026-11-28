@@ -13,11 +13,11 @@ export const DialogContent = React.forwardRef<
   React.ComponentPropsWithoutRef<typeof RadixDialog.Content>
 >(({ className, children, ...props }, ref) => (
   <RadixDialog.Portal>
-    <RadixDialog.Overlay className="fixed inset-0 z-[var(--sys-z-modal-backdrop,400)] bg-black/50 backdrop-blur-sm" />
+    <RadixDialog.Overlay className="fixed inset-0 z-[var(--sys-z-overlay,200)] bg-black/50 backdrop-blur-sm" />
     <RadixDialog.Content
       ref={ref}
       className={cn(
-        "fixed left-1/2 top-1/2 z-[var(--sys-z-modal,450)] w-[min(92vw,520px)] -translate-x-1/2 -translate-y-1/2",
+        "fixed left-1/2 top-1/2 z-[var(--sys-z-modal,300)] w-[min(92vw,520px)] -translate-x-1/2 -translate-y-1/2",
         "rounded-[var(--radius-xl,24px)] border border-[var(--border-default)]",
         "bg-[var(--bg-surface-elevated)] p-6 text-[var(--text-primary)] shadow-2xl",
         "forced-colors:border-[CanvasText]",
