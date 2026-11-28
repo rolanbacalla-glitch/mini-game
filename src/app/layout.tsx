@@ -22,10 +22,42 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
+const SITE_URL = "https://games.rolanbacalla.online";
+const SITE_TITLE = "Coffee Break — Restorative 3-Minute Browser Games";
+const SITE_DESCRIPTION =
+  "A calm collection of tactile, 2-to-4-minute daily browser puzzles built with the Antigravity v3.0 Design System.";
+
 export const metadata: Metadata = {
-  title: "Coffee Break — Restorative 3-Minute Browser Games",
-  description:
-    "A calm collection of tactile, 2-to-4-minute daily browser puzzles built with the Antigravity v3.0 Design System.",
+  metadataBase: new URL(SITE_URL),
+  title: SITE_TITLE,
+  description: SITE_DESCRIPTION,
+  verification: {
+    google: "6owHdHm79aL_eOwfX7Z1oPO6bsk4yO16l26nRwDiqMU",
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+      "max-video-preview": -1,
+    },
+  },
+  openGraph: {
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+    url: SITE_URL,
+    siteName: "Coffee Break",
+    type: "website",
+    locale: "en_GB",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+  },
 };
 
 export default function RootLayout({
