@@ -69,6 +69,18 @@
   --tile-rose-stroke: oklch(0.48 0.14 352);
   --tile-teal-fill: oklch(0.56 0.12 204);
   --tile-teal-stroke: oklch(0.44 0.11 204);
+
+  /* Theme-invariant Tabletop Board & Physical Piece Tokens (Light Mode) */
+  --board-square-light: oklch(0.996 0.002 258);
+  --board-square-dark: oklch(0.928 0.010 258);
+  --piece-white-bg: oklch(0.996 0.002 258);
+  --piece-white-fg: oklch(0.165 0.012 258);
+  --piece-white-border: oklch(0.225 0.012 258);
+  --piece-white-inner: oklch(0.165 0.012 258 / 0.20);
+  --piece-black-bg: oklch(0.175 0.014 258);
+  --piece-black-fg: oklch(0.985 0.005 258);
+  --piece-black-border: oklch(0.110 0.012 258);
+  --piece-black-inner: oklch(0.985 0.005 258 / 0.52);
 }
 
 /* ============================================================================
@@ -107,6 +119,18 @@
   --tile-rose-stroke: oklch(0.54 0.14 352);
   --tile-teal-fill: oklch(0.67 0.12 204);
   --tile-teal-stroke: oklch(0.51 0.11 204);
+
+  /* Theme-invariant Tabletop Board & Physical Piece Tokens (Dark Mode) */
+  --board-square-light: oklch(0.320 0.015 258);
+  --board-square-dark: oklch(0.205 0.014 258);
+  --piece-white-bg: oklch(0.965 0.006 258);
+  --piece-white-fg: oklch(0.155 0.014 258);
+  --piece-white-border: oklch(0.760 0.012 258);
+  --piece-white-inner: oklch(0.165 0.012 258 / 0.22);
+  --piece-black-bg: oklch(0.115 0.012 258);
+  --piece-black-fg: oklch(0.955 0.006 258);
+  --piece-black-border: oklch(0.560 0.014 258);
+  --piece-black-inner: oklch(0.955 0.006 258 / 0.45);
 }
 
 /* ============================================================================

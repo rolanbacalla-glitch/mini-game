@@ -171,11 +171,11 @@ function ChessToken({
       }
       className={`relative rounded-full flex items-center justify-center select-none pointer-events-none ${sizeClass} ${
         isP1
-          ? "bg-[var(--sys-color-surface-lowest)] text-[var(--sys-color-text-primary)] border-2 border-[var(--sys-color-text-primary)] shadow-[inset_0_2px_0_var(--sys-specular-top),0_3px_6px_rgba(0,0,0,0.16)]"
-          : "bg-[var(--sys-color-text-primary)] text-[var(--sys-color-surface-lowest)] border-2 border-[var(--sys-color-text-primary)] shadow-[inset_0_2px_4px_rgba(0,0,0,0.28),0_3px_6px_rgba(0,0,0,0.18)]"
+          ? "bg-[var(--piece-white-bg)] text-[var(--piece-white-fg)] border-2 border-[var(--piece-white-border)] shadow-[inset_0_2px_0_rgba(255,255,255,0.85),0_3px_6px_rgba(0,0,0,0.22)]"
+          : "bg-[var(--piece-black-bg)] text-[var(--piece-black-fg)] border-2 border-[var(--piece-black-border)] shadow-[inset_0_2px_4px_rgba(0,0,0,0.38),0_3px_6px_rgba(0,0,0,0.28)]"
       } ${
         isSelected
-          ? "ring-2 ring-offset-2 ring-[var(--sys-color-border-focus)] ring-offset-[var(--sys-color-surface-high)] shadow-[0_10px_20px_-6px_rgba(0,0,0,0.34)]"
+          ? "ring-2 ring-offset-2 ring-[var(--sys-color-border-focus)] ring-offset-[var(--board-square-dark)] shadow-[0_10px_20px_-6px_rgba(0,0,0,0.34)]"
           : ""
       }`}
     >
@@ -208,21 +208,21 @@ function ChessToken({
         />
       )}
 
-      {/* Player 1 smooth concentric wood-turn bevel */}
+      {/* White piece smooth concentric wood-turn bevel */}
       {isP1 && (
         <span
           aria-hidden="true"
-          className={`pointer-events-none absolute rounded-full border border-[var(--sys-color-text-primary)]/18 ${
+          className={`pointer-events-none absolute rounded-full border border-[var(--piece-white-inner)] ${
             size === "badge" ? "inset-[3px]" : "inset-[3px] sm:inset-[4px]"
           }`}
         />
       )}
 
-      {/* Player 2 grooved dashed collar (non-colour tactile texture) */}
+      {/* Black piece grooved dashed collar (non-colour tactile texture) */}
       {!isP1 && (
         <span
           aria-hidden="true"
-          className={`pointer-events-none absolute rounded-full border-dashed border-[var(--sys-color-surface-lowest)]/55 ${
+          className={`pointer-events-none absolute rounded-full border-dashed border-[var(--piece-black-inner)] ${
             size === "badge"
               ? "inset-[3px] border"
               : "inset-[3px] sm:inset-[4px] border-[1.5px]"
@@ -947,7 +947,7 @@ export function ChessGame() {
                   >
                     <span
                       aria-hidden="true"
-                      className="w-4 h-4 rounded-full bg-[var(--sys-color-surface-lowest)] text-[var(--sys-color-text-primary)] border border-[var(--sys-color-text-primary)] flex items-center justify-center text-[10px] leading-none"
+                      className="w-4 h-4 rounded-full bg-[var(--piece-white-bg)] text-[var(--piece-white-fg)] border border-[var(--piece-white-border)] flex items-center justify-center text-[10px] leading-none"
                     >
                       {PIECE_GLYPHS.k}
                     </span>
@@ -965,7 +965,7 @@ export function ChessGame() {
                   >
                     <span
                       aria-hidden="true"
-                      className="w-4 h-4 rounded-full bg-[var(--sys-color-text-primary)] text-[var(--sys-color-surface-lowest)] border border-[var(--sys-color-text-primary)] flex items-center justify-center text-[10px] leading-none"
+                      className="w-4 h-4 rounded-full bg-[var(--piece-black-bg)] text-[var(--piece-black-fg)] border border-[var(--piece-black-border)] flex items-center justify-center text-[10px] leading-none"
                     >
                       {PIECE_GLYPHS.k}
                     </span>
@@ -990,7 +990,7 @@ export function ChessGame() {
                   >
                     <span
                       aria-hidden="true"
-                      className="w-4 h-4 rounded-full bg-[var(--sys-color-surface-lowest)] text-[var(--sys-color-text-primary)] border border-[var(--sys-color-text-primary)] flex items-center justify-center text-[10px] leading-none"
+                      className="w-4 h-4 rounded-full bg-[var(--piece-white-bg)] text-[var(--piece-white-fg)] border border-[var(--piece-white-border)] flex items-center justify-center text-[10px] leading-none"
                     >
                       {PIECE_GLYPHS.k}
                     </span>
@@ -1008,7 +1008,7 @@ export function ChessGame() {
                   >
                     <span
                       aria-hidden="true"
-                      className="w-4 h-4 rounded-full bg-[var(--sys-color-surface-lowest)] text-[var(--sys-color-text-primary)] border border-[var(--sys-color-text-primary)] flex items-center justify-center text-[10px] leading-none"
+                      className="w-4 h-4 rounded-full bg-[var(--piece-white-bg)] text-[var(--piece-white-fg)] border border-[var(--piece-white-border)] flex items-center justify-center text-[10px] leading-none"
                     >
                       {PIECE_GLYPHS.k}
                     </span>
@@ -1148,10 +1148,10 @@ export function ChessGame() {
                                 }`}
                                 className={`relative aspect-square flex items-center justify-center transition-colors duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--sys-color-border-focus)] ${
                                   isLastSquare
-                                    ? "bg-[var(--sys-color-bg-surface-active)]"
+                                    ? "bg-[var(--sys-color-bg-action-primary-subtle)]"
                                     : darkSq
-                                      ? "bg-[var(--sys-color-surface-high)]"
-                                      : "bg-[var(--sys-color-surface-lowest)]"
+                                      ? "bg-[var(--board-square-dark)]"
+                                      : "bg-[var(--board-square-light)]"
                                 } ${canClick ? "cursor-pointer" : "cursor-default"}`}
                               >
                                 {/* Subtle edge rank/file labels on desktop */}
@@ -1431,10 +1431,10 @@ export function ChessGame() {
                 >
                   <div className="flex items-center gap-2.5 min-w-0">
                     {activeOpponent === "bot" && botSide === 1 ? (
-                      <span className="relative w-9 h-9 rounded-full bg-[var(--sys-color-surface-lowest)] text-[var(--sys-color-text-primary)] border-2 border-[var(--sys-color-text-primary)] shadow-[inset_0_2px_0_var(--sys-specular-top)] flex items-center justify-center shrink-0">
+                      <span className="relative w-9 h-9 rounded-full bg-[var(--piece-white-bg)] text-[var(--piece-white-fg)] border-2 border-[var(--piece-white-border)] shadow-[inset_0_2px_0_rgba(255,255,255,0.85)] flex items-center justify-center shrink-0">
                         <span
                           aria-hidden="true"
-                          className="pointer-events-none absolute inset-[3px] rounded-full border border-[var(--sys-color-text-primary)]/18"
+                          className="pointer-events-none absolute inset-[3px] rounded-full border border-[var(--piece-white-inner)]"
                         />
                         <CharacterIcon
                           iconKey={activeCharacter.iconKey}
@@ -1487,10 +1487,10 @@ export function ChessGame() {
                 >
                   <div className="flex items-center gap-2.5 min-w-0">
                     {activeOpponent === "bot" && botSide === 2 ? (
-                      <span className="relative w-9 h-9 rounded-full bg-[var(--sys-color-text-primary)] text-[var(--sys-color-surface-lowest)] border-2 border-[var(--sys-color-text-primary)] flex items-center justify-center shrink-0">
+                      <span className="relative w-9 h-9 rounded-full bg-[var(--piece-black-bg)] text-[var(--piece-black-fg)] border-2 border-[var(--piece-black-border)] flex items-center justify-center shrink-0">
                         <span
                           aria-hidden="true"
-                          className="pointer-events-none absolute inset-[3px] rounded-full border border-dashed border-[var(--sys-color-surface-lowest)]/55"
+                          className="pointer-events-none absolute inset-[3px] rounded-full border border-dashed border-[var(--piece-black-inner)]"
                         />
                         <CharacterIcon
                           iconKey={activeCharacter.iconKey}

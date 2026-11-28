@@ -177,20 +177,20 @@ function DraughtsPreviewGraphic() {
               key={idx}
               className={`flex items-center justify-center ${
                 darkSq
-                  ? "bg-[var(--sys-color-surface-high)]"
-                  : "bg-[var(--sys-color-surface-lowest)]"
+                  ? "bg-[var(--board-square-dark)]"
+                  : "bg-[var(--board-square-light)]"
               }`}
             >
               {(piece === 1 || piece === 3) && (
-                <span className="w-5 h-5 rounded-full bg-[var(--sys-color-surface-lowest)] border border-[var(--sys-color-text-primary)] text-[var(--sys-color-text-primary)] flex items-center justify-center">
+                <span className="w-5 h-5 rounded-full bg-[var(--piece-white-bg)] border border-[var(--piece-white-border)] text-[var(--piece-white-fg)] flex items-center justify-center">
                   {piece === 3 && (
                     <Crown className="w-2.5 h-2.5" strokeWidth={2.3} aria-hidden="true" />
                   )}
                 </span>
               )}
               {piece === 2 && (
-                <span className="w-5 h-5 rounded-full bg-[var(--sys-color-text-primary)] flex items-center justify-center">
-                  <span className="w-3 h-3 rounded-full border border-dashed border-[var(--sys-color-surface-lowest)]/60" />
+                <span className="w-5 h-5 rounded-full bg-[var(--piece-black-bg)] border border-[var(--piece-black-border)] flex items-center justify-center">
+                  <span className="w-3 h-3 rounded-full border border-dashed border-[var(--piece-black-inner)]" />
                 </span>
               )}
             </div>
@@ -222,17 +222,17 @@ function ChessPreviewGraphic() {
               key={idx}
               className={`flex items-center justify-center ${
                 darkSq
-                  ? "bg-[var(--sys-color-surface-high)]"
-                  : "bg-[var(--sys-color-surface-lowest)]"
+                  ? "bg-[var(--board-square-dark)]"
+                  : "bg-[var(--board-square-light)]"
               }`}
             >
               {piece && piece.player === 1 && (
-                <span className="w-5.5 h-5.5 rounded-full bg-[var(--sys-color-surface-lowest)] border border-[var(--sys-color-text-primary)] text-[var(--sys-color-text-primary)] flex items-center justify-center text-[13px] leading-none">
+                <span className="w-5.5 h-5.5 rounded-full bg-[var(--piece-white-bg)] border border-[var(--piece-white-border)] text-[var(--piece-white-fg)] flex items-center justify-center text-[13px] leading-none">
                   {piece.glyph}
                 </span>
               )}
               {piece && piece.player === 2 && (
-                <span className="w-5.5 h-5.5 rounded-full bg-[var(--sys-color-text-primary)] text-[var(--sys-color-surface-lowest)] flex items-center justify-center text-[13px] leading-none">
+                <span className="w-5.5 h-5.5 rounded-full bg-[var(--piece-black-bg)] border border-[var(--piece-black-border)] text-[var(--piece-black-fg)] flex items-center justify-center text-[13px] leading-none">
                   {piece.glyph}
                 </span>
               )}

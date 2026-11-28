@@ -132,11 +132,11 @@ function DraughtsDisc({
       }
       className={`relative rounded-full flex items-center justify-center select-none pointer-events-none ${sizeClass} ${
         isP1
-          ? "bg-[var(--sys-color-surface-lowest)] text-[var(--sys-color-text-primary)] border-2 border-[var(--sys-color-text-primary)] shadow-[inset_0_2px_0_var(--sys-specular-top),0_3px_6px_rgba(0,0,0,0.16)]"
-          : "bg-[var(--sys-color-text-primary)] text-[var(--sys-color-surface-lowest)] border-2 border-[var(--sys-color-text-primary)] shadow-[inset_0_2px_4px_rgba(0,0,0,0.28),0_3px_6px_rgba(0,0,0,0.18)]"
+          ? "bg-[var(--piece-white-bg)] text-[var(--piece-white-fg)] border-2 border-[var(--piece-white-border)] shadow-[inset_0_2px_0_rgba(255,255,255,0.85),0_3px_6px_rgba(0,0,0,0.22)]"
+          : "bg-[var(--piece-black-bg)] text-[var(--piece-black-fg)] border-2 border-[var(--piece-black-border)] shadow-[inset_0_2px_4px_rgba(0,0,0,0.38),0_3px_6px_rgba(0,0,0,0.28)]"
       } ${
         isSelected
-          ? "ring-2 ring-offset-2 ring-[var(--sys-color-border-focus)] ring-offset-[var(--sys-color-surface-high)] shadow-[0_10px_20px_-6px_rgba(0,0,0,0.34)]"
+          ? "ring-2 ring-offset-2 ring-[var(--sys-color-border-focus)] ring-offset-[var(--board-square-dark)] shadow-[0_10px_20px_-6px_rgba(0,0,0,0.34)]"
           : ""
       }`}
     >
@@ -167,7 +167,7 @@ function DraughtsDisc({
       {isP1 && (
         <span
           aria-hidden="true"
-          className={`pointer-events-none absolute rounded-full border border-[var(--sys-color-text-primary)]/20 ${
+          className={`pointer-events-none absolute rounded-full border border-[var(--piece-white-inner)] ${
             size === "badge" ? "inset-[3px]" : "inset-[4px]"
           }`}
         />
@@ -177,7 +177,7 @@ function DraughtsDisc({
       {!isP1 && (
         <span
           aria-hidden="true"
-          className={`pointer-events-none absolute rounded-full border-dashed border-[var(--sys-color-surface-lowest)]/55 ${
+          className={`pointer-events-none absolute rounded-full border-dashed border-[var(--piece-black-inner)] ${
             size === "badge" ? "inset-[3px] border" : "inset-[4px] border-[1.5px]"
           }`}
         />
@@ -205,8 +205,8 @@ function DraughtsDisc({
             size === "badge" ? "w-2.5 h-2.5" : "w-[26%] h-[26%]"
           } ${
             isP1
-              ? "border border-[var(--sys-color-text-primary)]/35 bg-[var(--sys-color-surface-low)]"
-              : "border border-[var(--sys-color-surface-lowest)]/45 bg-transparent"
+              ? "border border-[var(--piece-white-inner)] bg-black/5"
+              : "border border-[var(--piece-black-inner)] bg-transparent"
           }`}
         />
       )}
@@ -995,9 +995,9 @@ export function DraughtsGame() {
                                 className={`relative aspect-square flex items-center justify-center transition-colors duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--sys-color-border-focus)] ${
                                   playable
                                     ? isLastSquare
-                                      ? "bg-[var(--sys-color-bg-surface-active)]"
-                                      : "bg-[var(--sys-color-surface-high)]"
-                                    : "bg-[var(--sys-color-surface-lowest)]"
+                                      ? "bg-[var(--sys-color-bg-action-primary-subtle)]"
+                                      : "bg-[var(--board-square-dark)]"
+                                    : "bg-[var(--board-square-light)]"
                                 } ${canClick ? "cursor-pointer" : "cursor-default"}`}
                               >
                                 {/* Subtle edge rank/file labels on desktop */}
