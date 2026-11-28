@@ -30,10 +30,12 @@ import {
 } from "@/lib/games";
 import {
   formatDuration,
+  loadChessStats,
   loadChromaStats,
   loadDailyFourStats,
   loadDraughtsStats,
   loadLoomStats,
+  type ChessStats,
   type ChromaStats,
   type DailyFourStats,
   type DraughtsStats,
@@ -199,10 +201,54 @@ function DraughtsPreviewGraphic() {
   );
 }
 
+function ChessPreviewGraphic() {
+  // 4x4 miniature tactile monochrome checkerboard matching Draughts, with Ivory & Charcoal chess piece tokens
+  const layout: Array<{ player: 1 | 2; glyph: string } | null> = [
+    { player: 2, glyph: "\u265C\uFE0E" }, null, { player: 2, glyph: "\u265A\uFE0E" }, null,
+    null, { player: 2, glyph: "\u265F\uFE0E" }, null, { player: 2, glyph: "\u265E\uFE0E" },
+    { player: 1, glyph: "\u265D\uFE0E" }, null, { player: 1, glyph: "\u265F\uFE0E" }, null,
+    null, { player: 1, glyph: "\u265B\uFE0E" }, null, { player: 1, glyph: "\u265A\uFE0E" },
+  ];
+
+  return (
+    <div className="w-full h-36 rounded-xl bg-[var(--sys-color-surface-low)] border border-[var(--sys-color-border-subtle)] p-3 flex items-center justify-center">
+      <div className="grid grid-cols-4 grid-rows-4 w-28 h-28 rounded-lg overflow-hidden border border-[var(--sys-color-border-subtle)]">
+        {layout.map((piece, idx) => {
+          const r = Math.floor(idx / 4);
+          const c = idx % 4;
+          const darkSq = (r + c) % 2 === 1;
+          return (
+            <div
+              key={idx}
+              className={`flex items-center justify-center ${
+                darkSq
+                  ? "bg-[var(--sys-color-surface-high)]"
+                  : "bg-[var(--sys-color-surface-lowest)]"
+              }`}
+            >
+              {piece && piece.player === 1 && (
+                <span className="w-5.5 h-5.5 rounded-full bg-[var(--sys-color-surface-lowest)] border border-[var(--sys-color-text-primary)] text-[var(--sys-color-text-primary)] flex items-center justify-center text-[13px] leading-none">
+                  {piece.glyph}
+                </span>
+              )}
+              {piece && piece.player === 2 && (
+                <span className="w-5.5 h-5.5 rounded-full bg-[var(--sys-color-text-primary)] text-[var(--sys-color-surface-lowest)] flex items-center justify-center text-[13px] leading-none">
+                  {piece.glyph}
+                </span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function GamePreview({ id }: { id: string }) {
   if (id === "loom-and-latch") return <LoomPreviewGraphic />;
   if (id === "connect-4") return <Connect4PreviewGraphic />;
   if (id === "draughts") return <DraughtsPreviewGraphic />;
+  if (id === "chess") return <ChessPreviewGraphic />;
   return <ChromaCalmPreviewGraphic />;
 }
 
@@ -213,6 +259,7 @@ export function HubClient() {
   const [fourStats, setFourStats] = useState<DailyFourStats | null>(null);
   const [chromaStats, setChromaStats] = useState<ChromaStats | null>(null);
   const [draughtsStats, setDraughtsStats] = useState<DraughtsStats | null>(null);
+  const [chessStats, setChessStats] = useState<ChessStats | null>(null);
 
   useEffect(() => {
     const now = new Date();
@@ -222,6 +269,7 @@ export function HubClient() {
     setFourStats(loadDailyFourStats());
     setChromaStats(loadChromaStats());
     setDraughtsStats(loadDraughtsStats());
+    setChessStats(loadChessStats());
   }, []);
 
   const todayLoom = todayKey && loomStats ? loomStats.history[todayKey] : undefined;
@@ -230,28 +278,34 @@ export function HubClient() {
     todayKey && chromaStats ? chromaStats.history[todayKey] : undefined;
   const todayDraughts =
     todayKey && draughtsStats ? draughtsStats.history[todayKey] : undefined;
+  const todayChess =
+    todayKey && chessStats ? chessStats.history[todayKey] : undefined;
   const liveGamesCount = GAMES.filter((g) => g.status === "live").length;
   const completedTodayCount =
     (todayLoom ? 1 : 0) +
     (todayFour ? 1 : 0) +
     (todayChroma ? 1 : 0) +
-    (todayDraughts ? 1 : 0);
+    (todayDraughts ? 1 : 0) +
+    (todayChess ? 1 : 0);
   const topStreak = Math.max(
     loomStats?.currentStreak ?? 0,
     fourStats?.currentStreak ?? 0,
     chromaStats?.currentStreak ?? 0,
-    draughtsStats?.currentStreak ?? 0
+    draughtsStats?.currentStreak ?? 0,
+    chessStats?.currentStreak ?? 0
   );
   const totalDaily =
     (loomStats?.totalDailySolved ?? 0) +
     (fourStats?.totalDailySolved ?? 0) +
     (chromaStats?.totalDailySolved ?? 0) +
-    (draughtsStats?.totalDailySolved ?? 0);
+    (draughtsStats?.totalDailySolved ?? 0) +
+    (chessStats?.totalDailySolved ?? 0);
   const totalZen =
     (loomStats?.totalZenSolved ?? 0) +
     (fourStats?.totalZenPlayed ?? 0) +
     (chromaStats?.totalZenSolved ?? 0) +
-    (draughtsStats?.totalZenPlayed ?? 0);
+    (draughtsStats?.totalZenPlayed ?? 0) +
+    (chessStats?.totalZenPlayed ?? 0);
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -318,7 +372,9 @@ export function HubClient() {
                       ? `${todayChroma.swaps} swaps`
                       : game.id === "draughts" && todayDraughts
                         ? `${todayDraughts.turns} turns`
-                        : null;
+                        : game.id === "chess" && todayChess
+                          ? `${todayChess.moves} moves`
+                          : null;
               const isSolvedToday = Boolean(solvedBadgeText);
 
               return (

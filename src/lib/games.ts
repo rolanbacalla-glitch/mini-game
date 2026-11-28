@@ -60,6 +60,18 @@ export const GAMES: GameMeta[] = [
     restorativeBenefit: "Deep diagonal foresight with crisp monochrome discs and multi-jump chains.",
     accentColour: "var(--tile-slate-fill)",
   },
+  {
+    id: "chess",
+    slug: "/chess",
+    title: "Chess",
+    subtitle: "Classic chess rendered on the familiar tactile 8×8 board with engraved ivory and grooved charcoal pieces.",
+    duration: "5–10 mins",
+    supportsTwoPlayers: true,
+    status: "live",
+    statusLabel: "Play today's ritual",
+    restorativeBenefit: "Measured positional planning with crisp monochrome piece tokens and full rules.",
+    accentColour: "var(--tile-ochre-fill)",
+  },
 ];
 
 export function getTodayKey(date: Date = new Date()): string {

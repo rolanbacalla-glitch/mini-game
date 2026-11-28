@@ -453,3 +453,110 @@ export function recordDraughtsZenCompletion(): DraughtsStats {
   }
   return nextStats;
 }
+
+/* ---------- Chess Persistence ---------- */
+export interface ChessCompletionRecord {
+  dateKey: string;
+  outcome: "win" | "draw";
+  moves: number;
+  elapsedSeconds: number;
+  shareText: string;
+  completedAt: string;
+}
+
+export interface ChessStats {
+  currentStreak: number;
+  bestStreak: number;
+  totalDailySolved: number;
+  totalZenPlayed: number;
+  lastCompletedDate: string | null;
+  history: Record<string, ChessCompletionRecord>;
+}
+
+const CHESS_STATS_KEY = "coffee-break:chess:stats:v1";
+
+const DEFAULT_CHESS_STATS: ChessStats = {
+  currentStreak: 0,
+  bestStreak: 0,
+  totalDailySolved: 0,
+  totalZenPlayed: 0,
+  lastCompletedDate: null,
+  history: {},
+};
+
+export function loadChessStats(): ChessStats {
+  if (typeof window === "undefined") return DEFAULT_CHESS_STATS;
+  try {
+    const raw = window.localStorage.getItem(CHESS_STATS_KEY);
+    if (!raw) return DEFAULT_CHESS_STATS;
+    const parsed = JSON.parse(raw) as Partial<ChessStats>;
+    return {
+      ...DEFAULT_CHESS_STATS,
+      ...parsed,
+      history: parsed.history ?? {},
+    };
+  } catch {
+    return DEFAULT_CHESS_STATS;
+  }
+}
+
+export function recordChessDailyCompletion(
+  record: ChessCompletionRecord
+): ChessStats {
+  const stats = loadChessStats();
+  const alreadySolved = Boolean(stats.history[record.dateKey]);
+  const updatedHistory = {
+    ...stats.history,
+    [record.dateKey]: record,
+  };
+
+  let currentStreak = stats.currentStreak;
+  let totalDailySolved = stats.totalDailySolved;
+
+  if (!alreadySolved) {
+    totalDailySolved += 1;
+    const yesterday = getPreviousDateKey(record.dateKey);
+    if (stats.lastCompletedDate === yesterday) {
+      currentStreak = stats.currentStreak + 1;
+    } else if (stats.lastCompletedDate === record.dateKey) {
+      currentStreak = Math.max(1, stats.currentStreak);
+    } else {
+      currentStreak = 1;
+    }
+  }
+
+  const nextStats: ChessStats = {
+    ...stats,
+    currentStreak,
+    bestStreak: Math.max(stats.bestStreak, currentStreak),
+    totalDailySolved,
+    lastCompletedDate: record.dateKey,
+    history: updatedHistory,
+  };
+
+  if (typeof window !== "undefined") {
+    try {
+      window.localStorage.setItem(CHESS_STATS_KEY, JSON.stringify(nextStats));
+    } catch {
+      // Ignore storage quota errors
+    }
+  }
+  return nextStats;
+}
+
+export function recordChessZenCompletion(): ChessStats {
+  const stats = loadChessStats();
+  const nextStats: ChessStats = {
+    ...stats,
+    totalZenPlayed: stats.totalZenPlayed + 1,
+  };
+  if (typeof window !== "undefined") {
+    try {
+      window.localStorage.setItem(CHESS_STATS_KEY, JSON.stringify(nextStats));
+    } catch {
+      // Ignore storage quota errors
+    }
+  }
+  return nextStats;
+}
+
