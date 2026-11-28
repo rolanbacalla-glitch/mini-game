@@ -11,7 +11,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
-  Bot,
+  ArrowUpDown,
   Check,
   Copy,
   Crown,
@@ -65,7 +65,7 @@ import {
   type DraughtsStats,
 } from "@/lib/storage";
 
-type GameMode = "daily" | "zen";
+type GameMode = "daily" | "zen" | "2p";
 
 interface TurnSnapshot {
   board: DraughtsBoard;
@@ -103,7 +103,7 @@ function DraughtsDisc({
   isMustCapture?: boolean;
   isWinnerPiece?: boolean;
   winOrder?: number;
-  layoutPrefix?: number;
+  layoutPrefix?: string;
   size?: "board" | "badge";
   reducedMotion?: boolean;
 }) {
@@ -117,7 +117,7 @@ function DraughtsDisc({
     <motion.div
       layoutId={
         size === "board" && !reducedMotion
-          ? `${layoutPrefix ?? 0}-${piece.id}`
+          ? `${layoutPrefix ?? "0"}-${piece.id}`
           : undefined
       }
       transition={{
@@ -223,13 +223,12 @@ function DraughtsDisc({
 
 export function DraughtsGame() {
   const searchParams = useSearchParams();
+  const modeParam = searchParams.get("mode");
   const initialMode: GameMode =
-    searchParams.get("mode") === "zen" ? "zen" : "daily";
+    modeParam === "2p" ? "2p" : modeParam === "zen" ? "zen" : "daily";
 
   const [mode, setMode] = useState<GameMode>(initialMode);
   const [todayKey] = useState<string>(() => getTodayKey());
-
-  const [opponentMode, setOpponentMode] = useState<OpponentMode>("bot");
 
   const [board, setBoard] = useState<DraughtsBoard>(() => createInitialBoard());
   const [currentPlayer, setCurrentPlayer] = useState<Player>(1);
@@ -244,6 +243,13 @@ export function DraughtsGame() {
 
   const [botThinking, setBotThinking] = useState<boolean>(false);
   const [animatingBot, setAnimatingBot] = useState<boolean>(false);
+  const [manualFlipped, setManualFlipped] = useState<boolean>(false);
+  const [autoFlip, setAutoFlip] = useState<boolean>(false);
+  const [twoPlayerScore, setTwoPlayerScore] = useState<{
+    p1: number;
+    p2: number;
+    draws: number;
+  }>({ p1: 0, p2: 0, draws: 0 });
 
   const [elapsedSeconds, setElapsedSeconds] = useState<number>(0);
   const [matchNonce, setMatchNonce] = useState<number>(1);
@@ -254,7 +260,9 @@ export function DraughtsGame() {
   const recordedMatchRef = useRef<number>(0);
   const botTimersRef = useRef<number[]>([]);
 
-  const activeOpponent: OpponentMode = mode === "daily" ? "bot" : opponentMode;
+  const activeOpponent: OpponentMode = mode === "2p" ? "local" : "bot";
+  const isBoardFlipped =
+    mode === "2p" && (autoFlip ? currentPlayer === 2 : manualFlipped);
 
   const latestStateRef = useRef({
     board,
@@ -478,6 +486,12 @@ export function DraughtsGame() {
           "success"
         );
       }
+    } else if (mode === "2p") {
+      setTwoPlayerScore((prev) => ({
+        p1: prev.p1 + (outcome.winner === 1 ? 1 : 0),
+        p2: prev.p2 + (outcome.winner === 2 ? 1 : 0),
+        draws: prev.draws + (outcome.winner === "draw" ? 1 : 0),
+      }));
     } else {
       const updated = recordDraughtsZenCompletion();
       setStats(updated);
@@ -759,7 +773,11 @@ export function DraughtsGame() {
   const handleCopyShare = async () => {
     const shareText = buildDraughtsShareCard({
       dateLabel:
-        mode === "daily" ? formatShortBritishDate(todayKey) : "Free Play",
+        mode === "daily"
+          ? formatShortBritishDate(todayKey)
+          : mode === "2p"
+            ? "2 Players"
+            : "Free Play",
       outcomeLabel: outcomeTitle.replace(/\.$/, ""),
       turns,
       capturedByP1,
@@ -793,13 +811,21 @@ export function DraughtsGame() {
             <TabsList aria-label="Game mode">
               <TabsTrigger value="daily">Daily Match</TabsTrigger>
               <TabsTrigger value="zen">Free Play</TabsTrigger>
+              <TabsTrigger value="2p" className="inline-flex items-center gap-1.5">
+                <Users className="w-3.5 h-3.5" aria-hidden="true" />
+                <span>2 Players</span>
+              </TabsTrigger>
             </TabsList>
           </Tabs>
 
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2 text-xs text-[var(--sys-color-text-secondary)]">
               <span>
-                {mode === "daily" ? formatShortBritishDate(todayKey) : "Untimed"}
+                {mode === "daily"
+                  ? formatShortBritishDate(todayKey)
+                  : mode === "2p"
+                    ? "Pass & Play"
+                    : "Untimed"}
               </span>
               <span aria-hidden="true">·</span>
               <span className="font-mono tabular-nums text-[var(--sys-color-text-primary)] font-medium">
@@ -895,11 +921,18 @@ export function DraughtsGame() {
               {/* Architectural Matte Board Frame */}
               <div className="rounded-[20px] sm:rounded-[24px] bg-[var(--sys-color-surface-container)] border border-[var(--sys-color-border-subtle)] p-2 sm:p-3.5 shadow-[0_14px_34px_-18px_rgba(0,0,0,0.22)]">
                 <div className="grid grid-cols-8 grid-rows-8 aspect-square w-full overflow-hidden rounded-[12px] sm:rounded-[14px] border border-[var(--sys-color-border-subtle)]">
-                  {Array.from({ length: BOARD_SIZE }).map((_, row) =>
-                    Array.from({ length: BOARD_SIZE }).map((__, col) => {
-                      const playable = isPlayableSquare(row, col);
-                      const cell = board[row][col];
-                      const sqKey = `${row},${col}`;
+                  {Array.from({ length: BOARD_SIZE }).map((_, displayRowIdx) => {
+                    const row = isBoardFlipped
+                      ? BOARD_SIZE - 1 - displayRowIdx
+                      : displayRowIdx;
+                    return Array.from({ length: BOARD_SIZE }).map(
+                      (__, displayColIdx) => {
+                        const col = isBoardFlipped
+                          ? BOARD_SIZE - 1 - displayColIdx
+                          : displayColIdx;
+                        const playable = isPlayableSquare(row, col);
+                        const cell = board[row][col];
+                        const sqKey = `${row},${col}`;
 
                       const isSelected =
                         selectedSquare !== null &&
@@ -963,7 +996,7 @@ export function DraughtsGame() {
                           } ${canClick ? "cursor-pointer" : "cursor-default"}`}
                         >
                           {/* Subtle edge rank/file labels on desktop */}
-                          {col === 0 && (
+                          {displayColIdx === 0 && (
                             <span
                               aria-hidden="true"
                               className="hidden sm:block pointer-events-none absolute top-0.5 left-1 font-mono text-[9px] leading-none text-[var(--sys-color-text-muted)]/70"
@@ -971,7 +1004,7 @@ export function DraughtsGame() {
                               {BOARD_SIZE - row}
                             </span>
                           )}
-                          {row === BOARD_SIZE - 1 && (
+                          {displayRowIdx === BOARD_SIZE - 1 && (
                             <span
                               aria-hidden="true"
                               className="hidden sm:block pointer-events-none absolute bottom-0.5 right-1 font-mono text-[9px] leading-none text-[var(--sys-color-text-muted)]/70"
@@ -1007,14 +1040,15 @@ export function DraughtsGame() {
                               isMustCapture={isMustCapturePiece}
                               isWinnerPiece={isWinnerPiece}
                               winOrder={winOrder}
-                              layoutPrefix={matchNonce}
+                              layoutPrefix={`${matchNonce}-${isBoardFlipped ? "f" : "n"}`}
                               reducedMotion={prefersReducedMotion}
                             />
                           )}
                         </button>
                       );
-                    })
-                  )}
+                    }
+                  );
+                  })}
                 </div>
               </div>
             </div>
@@ -1181,6 +1215,40 @@ export function DraughtsGame() {
                 </div>
               </div>
 
+              {/* Head-to-head session score in 2-Player mode */}
+              {mode === "2p" && (
+                <div className="pt-2 border-t border-[var(--sys-color-border-subtle)] flex items-center justify-between gap-2 text-xs">
+                  <span className="text-[var(--sys-color-text-muted)]">
+                    Series
+                  </span>
+                  <div className="flex items-center gap-2.5 font-mono tabular-nums text-[var(--sys-color-text-primary)]">
+                    <span>P1 {twoPlayerScore.p1}</span>
+                    {twoPlayerScore.draws > 0 && (
+                      <span className="text-[var(--sys-color-text-muted)]">
+                        · {twoPlayerScore.draws}D
+                      </span>
+                    )}
+                    <span className="text-[var(--sys-color-text-muted)]">—</span>
+                    <span>{twoPlayerScore.p2} P2</span>
+                    {twoPlayerScore.p1 +
+                      twoPlayerScore.p2 +
+                      twoPlayerScore.draws >
+                      0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          soundEngine.playPickup();
+                          setTwoPlayerScore({ p1: 0, p2: 0, draws: 0 });
+                        }}
+                        className="ml-1 font-sans text-[11px] text-[var(--sys-color-text-muted)] hover:text-[var(--sys-color-text-primary)] underline underline-offset-2 cursor-pointer"
+                      >
+                        Reset
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Action Buttons */}
               <div className="pt-2 border-t border-[var(--sys-color-border-subtle)] flex items-center gap-2">
                 <Button
@@ -1209,49 +1277,46 @@ export function DraughtsGame() {
               </div>
             </div>
 
-            {/* Free Play Settings */}
-            {mode === "zen" && (
-              <div className="tonal-card p-4 space-y-4">
-                <div>
-                  <h2 className="text-sm font-semibold text-[var(--sys-color-text-primary)] mb-2">
-                    Opponent
+            {/* Pass & Play Tabletop Perspective Controls */}
+            {mode === "2p" && (
+              <div className="tonal-card p-4 space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <h2 className="text-sm font-semibold text-[var(--sys-color-text-primary)]">
+                    Pass &amp; Play view
                   </h2>
-                  <div className="grid grid-cols-2 gap-1.5 p-1 rounded-xl bg-[var(--sys-color-surface-low)] border border-[var(--sys-color-border-subtle)]">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (opponentMode !== "bot") {
-                          setOpponentMode("bot");
-                          resetBoard(true);
-                        }
-                      }}
-                      className={`min-h-[40px] px-3 py-1.5 rounded-lg text-xs font-medium inline-flex items-center justify-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
-                        opponentMode === "bot"
-                          ? "bg-[var(--sys-color-surface-lowest)] text-[var(--sys-color-text-primary)] shadow-xs"
-                          : "text-[var(--sys-color-text-secondary)] hover:text-[var(--sys-color-text-primary)]"
-                      }`}
-                    >
-                      <Bot className="w-3.5 h-3.5" aria-hidden="true" />
-                      <span>vs Bot</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (opponentMode !== "local") {
-                          setOpponentMode("local");
-                          resetBoard(true);
-                        }
-                      }}
-                      className={`min-h-[40px] px-3 py-1.5 rounded-lg text-xs font-medium inline-flex items-center justify-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
-                        opponentMode === "local"
-                          ? "bg-[var(--sys-color-surface-lowest)] text-[var(--sys-color-text-primary)] shadow-xs"
-                          : "text-[var(--sys-color-text-secondary)] hover:text-[var(--sys-color-text-primary)]"
-                      }`}
-                    >
-                      <Users className="w-3.5 h-3.5" aria-hidden="true" />
-                      <span>2 Players</span>
-                    </button>
-                  </div>
+                  <span className="text-xs text-[var(--sys-color-text-muted)]">
+                    {isBoardFlipped ? "Charcoal bottom" : "Ivory bottom"}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      soundEngine.playPickup();
+                      setAutoFlip(false);
+                      setManualFlipped((f) => !f);
+                    }}
+                    className="flex-1"
+                  >
+                    <ArrowUpDown className="w-4 h-4" aria-hidden="true" />
+                    <span>Flip board</span>
+                  </Button>
+                  <button
+                    type="button"
+                    aria-pressed={autoFlip}
+                    onClick={() => {
+                      soundEngine.playPickup();
+                      setAutoFlip((prev) => !prev);
+                    }}
+                    className={`min-h-[36px] px-3 py-1.5 rounded-xl border text-xs font-medium transition-colors cursor-pointer whitespace-nowrap ${
+                      autoFlip
+                        ? "bg-[var(--sys-color-surface-low)] border-[var(--sys-color-text-primary)] text-[var(--sys-color-text-primary)]"
+                        : "bg-transparent border-[var(--sys-color-border-subtle)] text-[var(--sys-color-text-secondary)] hover:bg-[var(--sys-color-surface-low)]"
+                    }`}
+                  >
+                    Auto-flip
+                  </button>
                 </div>
               </div>
             )}

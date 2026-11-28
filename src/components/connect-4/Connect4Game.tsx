@@ -13,7 +13,6 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
   Anchor,
   ArrowDown,
-  Bot,
   Cat,
   Check,
   Coffee,
@@ -76,7 +75,7 @@ import {
   type DailyFourStats,
 } from "@/lib/storage";
 
-type GameMode = "daily" | "zen";
+type GameMode = "daily" | "zen" | "2p";
 
 function EmblemIcon({
   iconKey,
@@ -279,8 +278,9 @@ function TactileDisc({
 
 export function Connect4Game() {
   const searchParams = useSearchParams();
+  const modeParam = searchParams.get("mode");
   const initialMode: GameMode =
-    searchParams.get("mode") === "zen" ? "zen" : "daily";
+    modeParam === "2p" ? "2p" : modeParam === "zen" ? "zen" : "daily";
 
   const [mode, setMode] = useState<GameMode>(initialMode);
   const [todayKey] = useState<string>(() => getTodayKey());
@@ -289,15 +289,19 @@ export function Connect4Game() {
   const [emblemPairId, setEmblemPairId] = useState<EmblemPairId>(dailyPair.id);
   const pair = useMemo(() => getEmblemPairById(emblemPairId), [emblemPairId]);
 
-  const [opponentMode, setOpponentMode] = useState<OpponentMode>("bot");
-
   const [board, setBoard] = useState<Board>(() => createEmptyBoard());
+  const [startingPlayer, setStartingPlayer] = useState<Player>(1);
   const [currentPlayer, setCurrentPlayer] = useState<Player>(1);
   const [history, setHistory] = useState<MoveRecord[]>([]);
   const [hoveredCol, setHoveredCol] = useState<number | null>(null);
   const [keyboardCol, setKeyboardCol] = useState<number>(3);
   const [usingKeyboard, setUsingKeyboard] = useState<boolean>(false);
   const [botThinking, setBotThinking] = useState<boolean>(false);
+  const [twoPlayerScore, setTwoPlayerScore] = useState<{
+    p1: number;
+    p2: number;
+    draws: number;
+  }>({ p1: 0, p2: 0, draws: 0 });
 
   const [elapsedSeconds, setElapsedSeconds] = useState<number>(0);
   const [matchNonce, setMatchNonce] = useState<number>(1);
@@ -307,7 +311,7 @@ export function Connect4Game() {
 
   const recordedMatchRef = useRef<number>(0);
 
-  const activeOpponent: OpponentMode = mode === "daily" ? "bot" : opponentMode;
+  const activeOpponent: OpponentMode = mode === "2p" ? "local" : "bot";
 
   const prefersReducedMotion = Boolean(useReducedMotion());
 
@@ -367,10 +371,11 @@ export function Connect4Game() {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
-  const resetBoard = useCallback((playAudio = false) => {
+  const resetBoard = useCallback((playAudio = false, nextStarter: Player = 1) => {
     if (playAudio) soundEngine.playClear();
     setBoard(createEmptyBoard());
-    setCurrentPlayer(1);
+    setStartingPlayer(nextStarter);
+    setCurrentPlayer(nextStarter);
     setHistory([]);
     setHoveredCol(null);
     setBotThinking(false);
@@ -384,9 +389,9 @@ export function Connect4Game() {
     setStats(loadDailyFourStats());
   }, []);
 
-  // Reset board cleanly when switching between Daily and Free Play
+  // Reset board cleanly when switching between Daily, Free Play, and 2 Players
   useEffect(() => {
-    resetBoard(false);
+    resetBoard(false, 1);
   }, [mode, resetBoard]);
 
   // Gentle elapsed timer (pauses once match ends)
@@ -472,6 +477,12 @@ export function Connect4Game() {
           "success"
         );
       }
+    } else if (mode === "2p") {
+      setTwoPlayerScore((prev) => ({
+        p1: prev.p1 + (result.winner === 1 ? 1 : 0),
+        p2: prev.p2 + (result.winner === 2 ? 1 : 0),
+        draws: prev.draws + (result.winner === "draw" ? 1 : 0),
+      }));
     } else {
       const updated = recordDailyFourZenCompletion();
       setStats(updated);
@@ -599,7 +610,7 @@ export function Connect4Game() {
     setHistory(nextHistory);
     setCurrentPlayer(
       nextHistory.length === 0
-        ? 1
+        ? startingPlayer
         : nextHistory[nextHistory.length - 1].player === 1
           ? 2
           : 1
@@ -624,7 +635,11 @@ export function Connect4Game() {
   const handleCopyShare = async () => {
     const shareText = buildConnect4ShareCard({
       dateLabel:
-        mode === "daily" ? formatShortBritishDate(todayKey) : "Free Play",
+        mode === "daily"
+          ? formatShortBritishDate(todayKey)
+          : mode === "2p"
+            ? "2 Players"
+            : "Free Play",
       pair,
       board,
       winningCells: result.winningCells,
@@ -693,13 +708,21 @@ export function Connect4Game() {
             <TabsList aria-label="Game mode">
               <TabsTrigger value="daily">Daily Match</TabsTrigger>
               <TabsTrigger value="zen">Free Play</TabsTrigger>
+              <TabsTrigger value="2p" className="inline-flex items-center gap-1.5">
+                <Users className="w-3.5 h-3.5" aria-hidden="true" />
+                <span>2 Players</span>
+              </TabsTrigger>
             </TabsList>
           </Tabs>
 
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2 text-xs text-[var(--sys-color-text-secondary)]">
               <span>
-                {mode === "daily" ? formatShortBritishDate(todayKey) : "Untimed"}
+                {mode === "daily"
+                  ? formatShortBritishDate(todayKey)
+                  : mode === "2p"
+                    ? "Pass & Play"
+                    : "Untimed"}
               </span>
               <span aria-hidden="true">·</span>
               <span className="font-mono tabular-nums text-[var(--sys-color-text-primary)] font-medium">
@@ -779,6 +802,22 @@ export function Connect4Game() {
             aria-label="Connect Four game board"
             className="flex flex-col items-center w-full"
           >
+            {/* Quiet Contextual Turn Strip */}
+            <div className="w-full max-w-[540px] flex items-center justify-between mb-1 px-1 text-xs text-[var(--sys-color-text-secondary)]">
+              <span className="font-medium text-[var(--sys-color-text-primary)]">
+                {isFinished
+                  ? outcomeTitle
+                  : botThinking
+                    ? `${p2Label} is thinking…`
+                    : `${currentPlayer === 1 ? p1Label : p2Label}'s turn · ${
+                        currentPlayer === 1 ? pair.p1.name : pair.p2.name
+                      }`}
+              </span>
+              <span className="font-mono tabular-nums text-[var(--sys-color-text-muted)]">
+                Move {history.length + 1}
+              </span>
+            </div>
+
             <div
               className="w-full max-w-[540px] game-touch-surface"
               onContextMenu={(e) => e.preventDefault()}
@@ -1161,7 +1200,12 @@ export function Connect4Game() {
                     <Button
                       variant="primary"
                       size="sm"
-                      onClick={() => resetBoard(true)}
+                      onClick={() =>
+                        resetBoard(
+                          true,
+                          mode === "2p" ? (startingPlayer === 1 ? 2 : 1) : 1
+                        )
+                      }
                     >
                       <RotateCcw className="w-4 h-4" />
                       <span>Play again</span>
@@ -1267,6 +1311,40 @@ export function Connect4Game() {
                 </div>
               </div>
 
+              {/* Head-to-head session score in 2-Player mode */}
+              {mode === "2p" && (
+                <div className="pt-2 border-t border-[var(--sys-color-border-subtle)] flex items-center justify-between gap-2 text-xs">
+                  <span className="text-[var(--sys-color-text-muted)]">
+                    Series
+                  </span>
+                  <div className="flex items-center gap-2.5 font-mono tabular-nums text-[var(--sys-color-text-primary)]">
+                    <span>P1 {twoPlayerScore.p1}</span>
+                    {twoPlayerScore.draws > 0 && (
+                      <span className="text-[var(--sys-color-text-muted)]">
+                        · {twoPlayerScore.draws}D
+                      </span>
+                    )}
+                    <span className="text-[var(--sys-color-text-muted)]">—</span>
+                    <span>{twoPlayerScore.p2} P2</span>
+                    {twoPlayerScore.p1 +
+                      twoPlayerScore.p2 +
+                      twoPlayerScore.draws >
+                      0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          soundEngine.playPickup();
+                          setTwoPlayerScore({ p1: 0, p2: 0, draws: 0 });
+                        }}
+                        className="ml-1 font-sans text-[11px] text-[var(--sys-color-text-muted)] hover:text-[var(--sys-color-text-primary)] underline underline-offset-2 cursor-pointer"
+                      >
+                        Reset
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Action Buttons */}
               <div className="pt-2 border-t border-[var(--sys-color-border-subtle)] flex items-center gap-2">
                 <Button
@@ -1282,7 +1360,16 @@ export function Connect4Game() {
                 <Button
                   variant="secondary"
                   size="sm"
-                  onClick={() => resetBoard(true)}
+                  onClick={() =>
+                    resetBoard(
+                      true,
+                      mode === "2p" && isFinished
+                        ? startingPlayer === 1
+                          ? 2
+                          : 1
+                        : startingPlayer
+                    )
+                  }
                   className="flex-1"
                 >
                   <RotateCcw className="w-4 h-4" />
@@ -1345,50 +1432,16 @@ export function Connect4Game() {
               </div>
             </div>
 
-            {/* Free Play Options (Opponent) */}
-            {mode === "zen" && (
-              <div className="tonal-card p-4 space-y-4">
-                <div>
-                  <h2 className="text-sm font-semibold text-[var(--sys-color-text-primary)] mb-2">
-                    Opponent
-                  </h2>
-                  <div className="grid grid-cols-2 gap-1.5 p-1 rounded-xl bg-[var(--sys-color-surface-low)] border border-[var(--sys-color-border-subtle)]">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (opponentMode !== "bot") {
-                          setOpponentMode("bot");
-                          resetBoard(true);
-                        }
-                      }}
-                      className={`min-h-[40px] px-3 py-1.5 rounded-lg text-xs font-medium inline-flex items-center justify-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
-                        opponentMode === "bot"
-                          ? "bg-[var(--sys-color-surface-lowest)] text-[var(--sys-color-text-primary)] shadow-xs"
-                          : "text-[var(--sys-color-text-secondary)] hover:text-[var(--sys-color-text-primary)]"
-                      }`}
-                    >
-                      <Bot className="w-3.5 h-3.5" aria-hidden="true" />
-                      <span>vs Bot</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (opponentMode !== "local") {
-                          setOpponentMode("local");
-                          resetBoard(true);
-                        }
-                      }}
-                      className={`min-h-[40px] px-3 py-1.5 rounded-lg text-xs font-medium inline-flex items-center justify-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
-                        opponentMode === "local"
-                          ? "bg-[var(--sys-color-surface-lowest)] text-[var(--sys-color-text-primary)] shadow-xs"
-                          : "text-[var(--sys-color-text-secondary)] hover:text-[var(--sys-color-text-primary)]"
-                      }`}
-                    >
-                      <Users className="w-3.5 h-3.5" aria-hidden="true" />
-                      <span>2 Players</span>
-                    </button>
-                  </div>
+            {/* Pass & Play tip in 2-Player mode */}
+            {mode === "2p" && (
+              <div className="tonal-card p-4 text-xs text-[var(--sys-color-text-secondary)] space-y-1.5 leading-relaxed">
+                <div className="font-semibold text-[var(--sys-color-text-primary)]">
+                  Pass &amp; Play
                 </div>
+                <p>
+                  Take turns dropping discs on the same device. Opening turn
+                  alternates automatically on each rematch.
+                </p>
               </div>
             )}
 

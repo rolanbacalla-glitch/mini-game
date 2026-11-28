@@ -12,6 +12,7 @@ import {
   Crown,
   Flame,
   Sparkles,
+  Users,
 } from "lucide-react";
 import { TopBar } from "@/components/TopBar";
 import {
@@ -341,7 +342,8 @@ export function HubClient() {
 
                     <div className="mt-5 flex items-center justify-between gap-2">
                       <span className="font-mono text-xs tabular-nums text-[var(--sys-color-text-muted)]">
-                        {game.duration}
+                        {game.duration} ·{" "}
+                        {game.supportsTwoPlayers ? "1–2 Players" : "Solo"}
                       </span>
 
                       {isSolvedToday ? (
@@ -380,9 +382,18 @@ export function HubClient() {
                             <ArrowRight className="w-4 h-4" />
                           </Button>
                         </Link>
-                        <Link href={`${game.slug}?mode=zen`}>
-                          <Button variant="secondary">Zen</Button>
-                        </Link>
+                        {game.supportsTwoPlayers ? (
+                          <Link href={`${game.slug}?mode=2p`}>
+                            <Button variant="secondary">
+                              <Users className="w-4 h-4" aria-hidden="true" />
+                              <span>2 Players</span>
+                            </Button>
+                          </Link>
+                        ) : (
+                          <Link href={`${game.slug}?mode=zen`}>
+                            <Button variant="secondary">Zen</Button>
+                          </Link>
+                        )}
                       </div>
                     ) : (
                       <p className="text-xs text-[var(--sys-color-text-muted)] leading-relaxed">

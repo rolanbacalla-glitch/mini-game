@@ -4,6 +4,7 @@ export interface GameMeta {
   title: string;
   subtitle: string;
   duration: string;
+  supportsTwoPlayers: boolean;
   status: "live" | "coming-soon";
   statusLabel: string;
   restorativeBenefit: string;
@@ -17,6 +18,7 @@ export const GAMES: GameMeta[] = [
     title: "Loom & Latch",
     subtitle: "Snap tactile geometric tiles into a calm 5×5 daily loom.",
     duration: "2–3 mins",
+    supportsTwoPlayers: false,
     status: "live",
     statusLabel: "Play today's ritual",
     restorativeBenefit: "Order from chaos — spatial closure with zero verbal strain.",
@@ -28,6 +30,7 @@ export const GAMES: GameMeta[] = [
     title: "Connect 4",
     subtitle: "Drop engraved symbol discs to connect four in a row — built without relying on colour.",
     duration: "2–3 mins",
+    supportsTwoPlayers: true,
     status: "live",
     statusLabel: "Play today's ritual",
     restorativeBenefit: "Calm tactical pattern reading through pure silhouette and tactile contrast.",
@@ -39,6 +42,7 @@ export const GAMES: GameMeta[] = [
     title: "Chroma Calm",
     subtitle: "Rearrange scrambled colour swatches to restore a harmonious daily gradient.",
     duration: "2–3 mins",
+    supportsTwoPlayers: false,
     status: "live",
     statusLabel: "Play today's ritual",
     restorativeBenefit: "Gentle left-to-right brain switch into pure visual perception.",
@@ -50,6 +54,7 @@ export const GAMES: GameMeta[] = [
     title: "Draughts",
     subtitle: "Play classic English Draughts across a tactile 8×8 board with forced jumps and crowned kings.",
     duration: "3–5 mins",
+    supportsTwoPlayers: true,
     status: "live",
     statusLabel: "Play today's ritual",
     restorativeBenefit: "Deep diagonal foresight with crisp monochrome discs and multi-jump chains.",
