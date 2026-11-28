@@ -73,8 +73,19 @@ type GameMode = "daily" | "zen";
 
 const TOTAL_PAIRS = 10;
 const BASE_MATCH_POINTS = 100;
+const CARD_FLIP_ANIMATION_MS = 420;
 const CASCADE_REVEAL_MS = 1500;
-const MISMATCH_DELAY_MS = 820;
+
+/**
+ * Computes an ergonomic dwell time for text-based memory cards:
+ * accounts for the 420ms 3D flip animation plus ~220ms/word reading & spatial encoding
+ * (clamped between 2.1s and 2.8s so short titles and full movie quotes are always legible).
+ */
+function computeMismatchDwellMs(secondCardText: string): number {
+  const words = secondCardText.trim().split(/\s+/).filter(Boolean).length;
+  const computed = CARD_FLIP_ANIMATION_MS + 1400 + words * 220;
+  return Math.min(2800, Math.max(2100, computed));
+}
 
 export function CauseEffectGame() {
   const searchParams = useSearchParams();
@@ -104,6 +115,9 @@ export function CauseEffectGame() {
   const [flippedUids, setFlippedUids] = useState<string[]>([]);
   const [lockedPairIds, setLockedPairIds] = useState<string[]>([]);
   const [mismatchUids, setMismatchUids] = useState<string[]>([]);
+  const [mismatchShakeActive, setMismatchShakeActive] =
+    useState<boolean>(false);
+  const [mismatchDwellMs, setMismatchDwellMs] = useState<number>(2200);
   const [isResolving, setIsResolving] = useState<boolean>(false);
   const [cascadeRevealing, setCascadeRevealing] = useState<boolean>(false);
   const [cascadeCount, setCascadeCount] = useState<number>(0);
@@ -123,6 +137,9 @@ export function CauseEffectGame() {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
 
   const timersRef = useRef<number[]>([]);
+  const mismatchCloseTimerRef = useRef<number | null>(null);
+  const mismatchShakeTimerRef = useRef<number | null>(null);
+  const mismatchAllowSkipAtRef = useRef<number>(0);
   const timelineEndRef = useRef<HTMLDivElement | null>(null);
 
   const scheduleTimeout = useCallback((fn: () => void, ms: number) => {
@@ -134,12 +151,30 @@ export function CauseEffectGame() {
     return id;
   }, []);
 
+  const clearMismatchTimers = useCallback(() => {
+    if (mismatchCloseTimerRef.current !== null) {
+      window.clearTimeout(mismatchCloseTimerRef.current);
+      timersRef.current = timersRef.current.filter(
+        (t) => t !== mismatchCloseTimerRef.current
+      );
+      mismatchCloseTimerRef.current = null;
+    }
+    if (mismatchShakeTimerRef.current !== null) {
+      window.clearTimeout(mismatchShakeTimerRef.current);
+      timersRef.current = timersRef.current.filter(
+        (t) => t !== mismatchShakeTimerRef.current
+      );
+      mismatchShakeTimerRef.current = null;
+    }
+  }, []);
+
   const clearAllTimers = useCallback(() => {
+    clearMismatchTimers();
     for (const id of timersRef.current) {
       window.clearTimeout(id);
     }
     timersRef.current = [];
-  }, []);
+  }, [clearMismatchTimers]);
 
   useEffect(() => {
     return () => clearAllTimers();
@@ -178,6 +213,7 @@ export function CauseEffectGame() {
     setFlippedUids([]);
     setLockedPairIds([]);
     setMismatchUids([]);
+    setMismatchShakeActive(false);
     setIsResolving(false);
     setCascadeRevealing(false);
     setCascadeCount(0);
@@ -227,17 +263,19 @@ export function CauseEffectGame() {
         ? 3
         : consecutiveMatches % 3;
 
+  const isShowingMismatch = mismatchUids.length === 2;
+
   const handleRestart = useCallback(() => {
     clearAllTimers();
     soundEngine.playClear();
     if (mode === "zen") {
       setShuffleNonce((n) => n + 1);
     } else {
-      // Replay today's deterministic layout from scratch
       setCards(buildShuffledDeck(themeId, deckSeed));
       setFlippedUids([]);
       setLockedPairIds([]);
       setMismatchUids([]);
+      setMismatchShakeActive(false);
       setIsResolving(false);
       setCascadeRevealing(false);
       setCascadeCount(0);
@@ -267,8 +305,26 @@ export function CauseEffectGame() {
 
   const handleCardFlip = useCallback(
     (card: DeckCard) => {
-      if (completed || isResolving || cascadeRevealing) return;
+      if (completed || cascadeRevealing) return;
       if (lockedPairSet.has(card.pairId)) return;
+
+      // Smart early-continue: if two mismatched cards are currently pausing open for reading
+      // and the player taps another face-down card after the flip completes, immediately close
+      // the mismatched pair and open the newly tapped card so brisk players never feel stuck.
+      if (mismatchUids.length === 2) {
+        if (mismatchUids.includes(card.uid)) return;
+        if (performance.now() < mismatchAllowSkipAtRef.current) return;
+
+        clearMismatchTimers();
+        setMismatchUids([]);
+        setMismatchShakeActive(false);
+        setIsResolving(false);
+        soundEngine.playPickup();
+        setFlippedUids([card.uid]);
+        return;
+      }
+
+      if (isResolving) return;
       if (flippedUids.includes(card.uid)) return;
       if (flippedUids.length >= 2) return;
 
@@ -372,30 +428,45 @@ export function CauseEffectGame() {
               setCascadeRevealing(false);
               setIsResolving(false);
             }, CASCADE_REVEAL_MS);
-          }, 260);
+          }, 300);
         } else {
           scheduleTimeout(() => {
             setIsResolving(false);
           }, 220);
         }
       } else {
-        // Mismatch: shake briefly, reset streak to 1x, flip both cards back down
-        soundEngine.playInvalid();
+        // Mismatch: let the 2nd card finish its 420ms flip cleanly before nudging,
+        // then hold both open for 2.1s–2.8s (scaled to phrase length) so players can read & memorise.
+        const dwellMs = computeMismatchDwellMs(card.text);
+        setMismatchDwellMs(dwellMs);
         setMismatchUids(nextFlipped);
+        setMismatchShakeActive(false);
         setConsecutiveMatches(0);
+        mismatchAllowSkipAtRef.current =
+          performance.now() + CARD_FLIP_ANIMATION_MS;
 
-        scheduleTimeout(() => {
+        mismatchShakeTimerRef.current = scheduleTimeout(() => {
+          mismatchShakeTimerRef.current = null;
+          soundEngine.playInvalid();
+          setMismatchShakeActive(true);
+        }, CARD_FLIP_ANIMATION_MS);
+
+        mismatchCloseTimerRef.current = scheduleTimeout(() => {
+          mismatchCloseTimerRef.current = null;
           setFlippedUids([]);
           setMismatchUids([]);
+          setMismatchShakeActive(false);
           setIsResolving(false);
-        }, MISMATCH_DELAY_MS);
+        }, dwellMs);
       }
     },
     [
       completed,
-      isResolving,
       cascadeRevealing,
       lockedPairSet,
+      mismatchUids,
+      clearMismatchTimers,
+      isResolving,
       flippedUids,
       hasStarted,
       cards,
@@ -431,10 +502,18 @@ export function CauseEffectGame() {
     try {
       await navigator.clipboard.writeText(shareText);
       setCopied(true);
-      pushToast("Copied summary", "Ready to share your cascading chain.", "success");
+      pushToast(
+        "Copied summary",
+        "Ready to share your cascading chain.",
+        "success"
+      );
       window.setTimeout(() => setCopied(false), 2200);
     } catch {
-      pushToast("Could not copy", "Clipboard access is restricted in this browser.", "error");
+      pushToast(
+        "Could not copy",
+        "Clipboard access is restricted in this browser.",
+        "error"
+      );
     }
   }, [shareText, pushToast]);
 
@@ -442,26 +521,36 @@ export function CauseEffectGame() {
     <div className="min-h-screen flex flex-col">
       <TopBar backHref="/" title="Cause & Effect" />
 
-      <main className="flex-1 w-full max-w-6xl mx-auto px-4 sm:px-6 pt-5 pb-14">
-        {/* Top Controls Row: Mode Tabs, Theme Dropdown, Date/Streak, Help */}
-        <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
-          <div className="flex flex-wrap items-center gap-3">
-            <Tabs
-              value={mode}
-              onValueChange={(v) => setMode(v as GameMode)}
-            >
+      <main className="flex-1 w-full max-w-6xl mx-auto px-3 sm:px-6 pt-3 pb-6 flex flex-col">
+        {/* Compact Unified Command & Telemetry Bar (fits full game above the fold on desktop) */}
+        <section
+          aria-label="Game controls and status"
+          className="mb-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2.5 pb-2.5 border-b border-[var(--sys-color-border-subtle)]"
+        >
+          {/* Left: Mode Switcher + Theme Dropdown */}
+          <div className="flex flex-wrap items-center gap-2.5">
+            <Tabs value={mode} onValueChange={(v) => setMode(v as GameMode)}>
               <TabsList aria-label="Game mode">
-                <TabsTrigger value="daily">Daily Ritual</TabsTrigger>
-                <TabsTrigger value="zen">Free Play</TabsTrigger>
+                <TabsTrigger value="daily" className="min-h-9 px-2.5 text-xs sm:text-sm">
+                  Daily
+                </TabsTrigger>
+                <TabsTrigger value="zen" className="min-h-9 px-2.5 text-xs sm:text-sm">
+                  Free Play
+                </TabsTrigger>
               </TabsList>
             </Tabs>
 
-            <div className="w-[260px] sm:w-[290px]">
+            <div className="w-[235px] sm:w-[275px]">
               <Select
                 value={themeId}
-                onValueChange={(value) => setThemeId(value as CauseEffectThemeId)}
+                onValueChange={(value) =>
+                  setThemeId(value as CauseEffectThemeId)
+                }
               >
-                <SelectTrigger aria-label="Select card deck theme">
+                <SelectTrigger
+                  aria-label="Select card deck theme"
+                  className="min-h-[40px] text-xs sm:text-sm"
+                >
                   <SelectValue placeholder="Choose a theme" />
                 </SelectTrigger>
                 <SelectContent>
@@ -475,207 +564,185 @@ export function CauseEffectGame() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <Badge tone="neutral" className="font-mono tabular-nums">
-              {mode === "daily"
-                ? formatShortBritishDate(todayKey)
-                : `Deck #${shuffleNonce}`}
-            </Badge>
-
-            {stats && stats.currentStreak > 0 && (
-              <Badge tone="success" className="font-mono tabular-nums">
-                <Flame className="w-3.5 h-3.5" aria-hidden="true" />
-                <span>{stats.currentStreak}d</span>
-              </Badge>
-            )}
-
-            <Dialog>
-              <DialogTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  aria-label="How to play Cause & Effect"
+          {/* Right: Live Unboxed Telemetry + Streak + Help */}
+          <div className="flex flex-wrap items-center gap-4 sm:gap-5">
+            <div className="flex items-center gap-4">
+              <div>
+                <p className="text-[10px] uppercase tracking-wider text-[var(--sys-color-text-muted)] leading-none">
+                  Score
+                </p>
+                <p className="mt-0.5 font-mono text-base sm:text-lg font-semibold tabular-nums leading-tight text-[var(--sys-color-text-primary)]">
+                  {score.toLocaleString()}
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-wider text-[var(--sys-color-text-muted)] leading-none">
+                  Moves
+                </p>
+                <p className="mt-0.5 font-mono text-base sm:text-lg font-semibold tabular-nums leading-tight text-[var(--sys-color-text-primary)]">
+                  {moves}
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-wider text-[var(--sys-color-text-muted)] leading-none">
+                  Chain
+                </p>
+                <p
+                  className={`mt-0.5 font-mono text-base sm:text-lg font-semibold tabular-nums leading-tight ${
+                    consecutiveMatches >= 3
+                      ? "text-[var(--card-cause-accent)]"
+                      : "text-[var(--sys-color-text-primary)]"
+                  }`}
                 >
-                  <HelpCircle className="w-4 h-4" />
-                  <span className="hidden sm:inline">How to play</span>
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogTitle>Cause &amp; Effect: Cascading Chains</DialogTitle>
-                <DialogDescription>
-                  Pair asymmetrical Cause and Effect cards across a 4×5 grid to build
-                  unbroken multiplier chains.
-                </DialogDescription>
-                <div className="mt-4 space-y-3 text-sm text-[var(--sys-color-text-secondary)] leading-relaxed">
-                  <p>
-                    <strong className="text-[var(--sys-color-text-primary)]">
-                      1. Asymmetrical pairs:
-                    </strong>{" "}
-                    Every pair combines one amber{" "}
-                    <span className="font-mono text-xs font-semibold text-[var(--card-cause-accent)]">
-                      CAUSE
-                    </span>{" "}
-                    card with its matching teal{" "}
-                    <span className="font-mono text-xs font-semibold text-[var(--card-effect-accent)]">
-                      EFFECT
-                    </span>{" "}
-                    card. Matched pairs stay face-up and locked on the board.
-                  </p>
-                  <p>
-                    <strong className="text-[var(--sys-color-text-primary)]">
-                      2. Cascade Multiplier:
-                    </strong>{" "}
-                    Each match awards 100 points multiplied by your consecutive Chain
-                    Streak (1x, 2x, 3x, …). Missing a match flips the two cards back
-                    and resets your streak to 1x.
-                  </p>
-                  <p>
-                    <strong className="text-[var(--sys-color-text-primary)]">
-                      3. 3x Cascade Reveal:
-                    </strong>{" "}
-                    Reaching a 3x Chain Streak triggers a 1.5-second flash showing all
-                    remaining unmatched Cause cards on the grid to help keep your chain
-                    alive.
-                  </p>
-                </div>
-                <div className="mt-6 flex justify-end">
-                  <DialogClose asChild>
-                    <Button variant="primary">Got it</Button>
-                  </DialogClose>
-                </div>
-              </DialogContent>
-            </Dialog>
-          </div>
-        </div>
+                  {activeMultiplier}x
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-wider text-[var(--sys-color-text-muted)] leading-none">
+                  Pairs
+                </p>
+                <p className="mt-0.5 font-mono text-base sm:text-lg font-semibold tabular-nums leading-tight text-[var(--sys-color-text-primary)]">
+                  {lockedPairIds.length}/{TOTAL_PAIRS}
+                </p>
+              </div>
+              <div className="hidden md:block">
+                <p className="text-[10px] uppercase tracking-wider text-[var(--sys-color-text-muted)] leading-none">
+                  Time
+                </p>
+                <p className="mt-0.5 font-mono text-base sm:text-lg font-semibold tabular-nums leading-tight text-[var(--sys-color-text-secondary)]">
+                  {formatDuration(elapsedSeconds)}
+                </p>
+              </div>
+            </div>
 
-        {/* Clean Unboxed Telemetry & Theme Header */}
-        <section
-          aria-label="Game status"
-          className="mb-4 flex flex-col sm:flex-row sm:items-end justify-between gap-3 pb-3 border-b border-[var(--sys-color-border-subtle)]"
-        >
-          <div>
-            <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-[var(--sys-color-text-muted)]">
-              <span>Cascading Chains</span>
-              <span aria-hidden="true">·</span>
-              <span className="text-[var(--card-cause-accent)]">
-                {activeTheme.causeLabel}
-              </span>
-              <ArrowRight className="w-3 h-3" aria-hidden="true" />
-              <span className="text-[var(--card-effect-accent)]">
-                {activeTheme.effectLabel}
-              </span>
-            </div>
-            <h1 className="mt-1 text-xl sm:text-2xl font-semibold tracking-tight text-[var(--sys-color-text-primary)]">
-              {activeTheme.title}
-            </h1>
-          </div>
+            <div className="flex items-center gap-1.5">
+              {stats && stats.currentStreak > 0 && (
+                <Badge tone="success" className="font-mono tabular-nums">
+                  <Flame className="w-3.5 h-3.5" aria-hidden="true" />
+                  <span>{stats.currentStreak}d</span>
+                </Badge>
+              )}
 
-          <div className="flex flex-wrap items-center gap-5 sm:gap-6">
-            <div>
-              <p className="text-[11px] uppercase tracking-wider text-[var(--sys-color-text-muted)]">
-                Score
-              </p>
-              <p className="font-mono text-lg sm:text-xl font-semibold tabular-nums text-[var(--sys-color-text-primary)]">
-                {score.toLocaleString()}
-              </p>
-            </div>
-            <div>
-              <p className="text-[11px] uppercase tracking-wider text-[var(--sys-color-text-muted)]">
-                Moves
-              </p>
-              <p className="font-mono text-lg sm:text-xl font-semibold tabular-nums text-[var(--sys-color-text-primary)]">
-                {moves}
-              </p>
-            </div>
-            <div>
-              <p className="text-[11px] uppercase tracking-wider text-[var(--sys-color-text-muted)]">
-                Chain
-              </p>
-              <p
-                className={`font-mono text-lg sm:text-xl font-semibold tabular-nums ${
-                  consecutiveMatches >= 3
-                    ? "text-[var(--card-cause-accent)]"
-                    : "text-[var(--sys-color-text-primary)]"
-                }`}
-              >
-                {activeMultiplier}x
-              </p>
-            </div>
-            <div>
-              <p className="text-[11px] uppercase tracking-wider text-[var(--sys-color-text-muted)]">
-                Pairs
-              </p>
-              <p className="font-mono text-lg sm:text-xl font-semibold tabular-nums text-[var(--sys-color-text-primary)]">
-                {lockedPairIds.length}/{TOTAL_PAIRS}
-              </p>
-            </div>
-            <div className="hidden sm:block">
-              <p className="text-[11px] uppercase tracking-wider text-[var(--sys-color-text-muted)]">
-                Time
-              </p>
-              <p className="font-mono text-lg sm:text-xl font-semibold tabular-nums text-[var(--sys-color-text-secondary)]">
-                {formatDuration(elapsedSeconds)}
-              </p>
+              <Dialog>
+                <DialogTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    aria-label="How to play Cause & Effect"
+                    className="px-2"
+                  >
+                    <HelpCircle className="w-4 h-4" />
+                    <span className="sr-only sm:not-sr-only sm:inline">
+                      Rules
+                    </span>
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogTitle>Cause &amp; Effect: Cascading Chains</DialogTitle>
+                  <DialogDescription>
+                    Pair asymmetrical Cause and Effect cards across a 4×5 grid to
+                    build unbroken multiplier chains.
+                  </DialogDescription>
+                  <div className="mt-4 space-y-3 text-sm text-[var(--sys-color-text-secondary)] leading-relaxed">
+                    <p>
+                      <strong className="text-[var(--sys-color-text-primary)]">
+                        1. Asymmetrical pairs:
+                      </strong>{" "}
+                      Every pair combines one amber{" "}
+                      <span className="font-mono text-xs font-semibold text-[var(--card-cause-accent)]">
+                        CAUSE
+                      </span>{" "}
+                      card with its matching teal{" "}
+                      <span className="font-mono text-xs font-semibold text-[var(--card-effect-accent)]">
+                        EFFECT
+                      </span>{" "}
+                      card. Matched pairs stay face-up and locked on the board.
+                    </p>
+                    <p>
+                      <strong className="text-[var(--sys-color-text-primary)]">
+                        2. Comfortable reading pace:
+                      </strong>{" "}
+                      Mismatched cards stay face-up for over 2 seconds so you
+                      can read and memorise their positions—or tap another
+                      face-down card right away to continue faster.
+                    </p>
+                    <p>
+                      <strong className="text-[var(--sys-color-text-primary)]">
+                        3. Cascade Multiplier &amp; 3x Reveal:
+                      </strong>{" "}
+                      Consecutive matches multiply points (1x, 2x, 3x…).
+                      Reaching a 3x Chain Streak triggers a 1.5-second flash
+                      showing all remaining unmatched Cause cards on the grid.
+                    </p>
+                  </div>
+                  <div className="mt-6 flex justify-end">
+                    <DialogClose asChild>
+                      <Button variant="primary">Got it</Button>
+                    </DialogClose>
+                  </div>
+                </DialogContent>
+              </Dialog>
             </div>
           </div>
         </section>
 
-        {/* Cascade Reveal 1.5s Alert Banner */}
-        <AnimatePresence>
-          {cascadeRevealing && (
-            <motion.div
-              key={`cascade-banner-${cascadeCount}`}
-              initial={{ opacity: 0, y: -8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.2 }}
-              className="mb-4 rounded-xl border-2 px-4 py-2.5 overflow-hidden"
-              style={{
-                backgroundColor: "var(--card-cause-bg)",
-                borderColor: "var(--card-cause-border)",
-              }}
-              role="status"
-              aria-live="polite"
-            >
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2 text-sm font-semibold text-[var(--card-cause-accent)]">
-                  <Eye className="w-4 h-4 shrink-0" aria-hidden="true" />
-                  <span>
-                    Cascade Reveal ({consecutiveMatches}x Chain) — Memorise the
-                    remaining Cause cards!
-                  </span>
-                </div>
-                <span className="font-mono text-xs font-semibold tabular-nums text-[var(--card-cause-accent)]">
-                  1.5s
-                </span>
-              </div>
-              <div className="mt-2 h-1 w-full rounded-full bg-[var(--sys-color-surface-canvas)]/40 overflow-hidden">
-                <motion.div
-                  initial={{ scaleX: 1 }}
-                  animate={{ scaleX: 0 }}
-                  transition={{
-                    duration: CASCADE_REVEAL_MS / 1000,
-                    ease: "linear",
-                  }}
-                  style={{
-                    transformOrigin: "left center",
-                    backgroundColor: "var(--card-cause-border)",
-                  }}
-                  className="h-full w-full"
-                />
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Main 2-Column Tabletop Arena: 4×5 Card Grid + Chain Tracker Sidebar */}
-        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] gap-6 items-start">
-          {/* Focal Anchor: 4×5 Asymmetrical Memory Grid */}
+        {/* Main 2-Column Viewport-Fitted Arena: 4×5 Card Grid + Chain Tracker Sidebar */}
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_300px] gap-4 items-stretch lg:h-[calc(100dvh-176px)] lg:min-h-[450px] lg:max-h-[600px]">
+          {/* Focal Anchor: Viewport-Fit 4×5 Card Grid (zero-scroll on desktop) */}
           <section
             aria-label="4 by 5 Cause and Effect card grid"
-            className="tonal-card p-3 sm:p-4 game-touch-surface"
+            className="tonal-card p-2.5 sm:p-3.5 game-touch-surface relative flex flex-col justify-between min-h-0"
           >
-            <div className="grid grid-cols-4 sm:grid-cols-5 gap-2 sm:gap-3">
+            {/* Non-shifting Cascade Reveal Floating Banner (overlays top edge cleanly) */}
+            <AnimatePresence>
+              {cascadeRevealing && (
+                <motion.div
+                  key={`cascade-banner-${cascadeCount}`}
+                  initial={{ opacity: 0, y: -8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  transition={{ duration: 0.18 }}
+                  className="absolute inset-x-3 top-3 z-20 rounded-xl border-2 px-3.5 py-2 shadow-lg overflow-hidden pointer-events-none"
+                  style={{
+                    backgroundColor: "var(--card-cause-bg)",
+                    borderColor: "var(--card-cause-border)",
+                  }}
+                  role="status"
+                  aria-live="polite"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 text-xs sm:text-sm font-semibold text-[var(--card-cause-accent)]">
+                      <Eye className="w-4 h-4 shrink-0" aria-hidden="true" />
+                      <span>
+                        Cascade Reveal ({consecutiveMatches}x Chain) — Memorise
+                        remaining Cause cards!
+                      </span>
+                    </div>
+                    <span className="font-mono text-xs font-semibold tabular-nums text-[var(--card-cause-accent)]">
+                      1.5s
+                    </span>
+                  </div>
+                  <div className="mt-1.5 h-1 w-full rounded-full bg-[var(--sys-color-surface-canvas)]/40 overflow-hidden">
+                    <motion.div
+                      initial={{ scaleX: 1 }}
+                      animate={{ scaleX: 0 }}
+                      transition={{
+                        duration: CASCADE_REVEAL_MS / 1000,
+                        ease: "linear",
+                      }}
+                      style={{
+                        transformOrigin: "left center",
+                        backgroundColor: "var(--card-cause-border)",
+                      }}
+                      className="h-full w-full"
+                    />
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* 4×5 Responsive Grid: 4×5 on mobile, 5×4 viewport-fitted rows on desktop */}
+            <div className="grid grid-cols-4 sm:grid-cols-5 lg:grid-rows-4 gap-2 sm:gap-2.5 flex-1 min-h-0">
               {cards.map((card, idx) => {
                 const isLocked = lockedPairSet.has(card.pairId);
                 const isSelected = flippedUids.includes(card.uid);
@@ -689,17 +756,21 @@ export function CauseEffectGame() {
                   <motion.div
                     key={card.uid}
                     animate={
-                      isMismatch && !prefersReducedMotion
-                        ? { x: [0, -5, 5, -3, 3, 0] }
+                      isMismatch && mismatchShakeActive && !prefersReducedMotion
+                        ? { x: [0, -4, 4, -2, 2, 0] }
                         : { x: 0 }
                     }
-                    transition={{ duration: 0.34, ease: "easeInOut" }}
-                    className="card-3d-scene aspect-[4/5] sm:aspect-[5/6]"
+                    transition={{ duration: 0.28, ease: "easeInOut" }}
+                    className="card-3d-scene min-h-[96px] sm:min-h-[106px] lg:min-h-0 h-full"
                   >
                     <button
                       type="button"
                       onClick={() => handleCardFlip(card)}
-                      disabled={isLocked || isResolving || cascadeRevealing}
+                      disabled={
+                        isLocked ||
+                        cascadeRevealing ||
+                        (isResolving && mismatchUids.length !== 2)
+                      }
                       aria-pressed={isFaceUp}
                       aria-label={
                         isFaceUp
@@ -716,16 +787,16 @@ export function CauseEffectGame() {
                         }`}
                       >
                         {/* Face-Down Card Back */}
-                        <div className="card-3d-face rounded-xl bg-[var(--sys-color-surface-low)] border border-[var(--sys-color-border-subtle)] group-hover:border-[var(--sys-color-border-focus)] group-hover:bg-[var(--sys-color-surface-container)] transition-colors p-2 flex flex-col items-center justify-center">
-                          <div className="w-full h-full rounded-lg border border-dashed border-[var(--sys-color-border-subtle)] flex flex-col items-center justify-center gap-1.5">
-                            <span className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-[var(--sys-color-surface-lowest)] border border-[var(--sys-color-border-subtle)] flex items-center justify-center text-[var(--sys-color-text-muted)] group-hover:text-[var(--sys-color-text-primary)] transition-colors">
+                        <div className="card-3d-face rounded-xl bg-[var(--sys-color-surface-low)] border border-[var(--sys-color-border-subtle)] group-hover:border-[var(--sys-color-border-focus)] group-hover:bg-[var(--sys-color-surface-container)] transition-colors p-1.5 sm:p-2 flex flex-col items-center justify-center">
+                          <div className="w-full h-full rounded-lg border border-dashed border-[var(--sys-color-border-subtle)] flex flex-col items-center justify-center gap-1">
+                            <span className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-[var(--sys-color-surface-lowest)] border border-[var(--sys-color-border-subtle)] flex items-center justify-center text-[var(--sys-color-text-muted)] group-hover:text-[var(--sys-color-text-primary)] transition-colors">
                               <Link2
-                                className="w-3.5 h-3.5 sm:w-4 sm:h-4"
+                                className="w-3 h-3 sm:w-3.5 sm:h-3.5"
                                 strokeWidth={2}
                                 aria-hidden="true"
                               />
                             </span>
-                            <span className="font-mono text-[10px] tabular-nums text-[var(--sys-color-text-muted)]">
+                            <span className="font-mono text-[9px] sm:text-[10px] tabular-nums text-[var(--sys-color-text-muted)]">
                               {String(idx + 1).padStart(2, "0")}
                             </span>
                           </div>
@@ -733,7 +804,7 @@ export function CauseEffectGame() {
 
                         {/* Face-Up Card Front */}
                         <div
-                          className="card-3d-face card-3d-front rounded-xl border-2 p-2 sm:p-2.5 flex flex-col justify-between transition-shadow"
+                          className="card-3d-face card-3d-front rounded-xl border-2 px-1.5 py-1.5 sm:px-2.5 sm:py-2 flex flex-col justify-between overflow-hidden relative transition-shadow"
                           style={{
                             backgroundColor: isCause
                               ? "var(--card-cause-bg)"
@@ -743,17 +814,17 @@ export function CauseEffectGame() {
                               : "var(--card-effect-border)",
                             boxShadow: isLocked
                               ? isCause
-                                ? "0 0 0 1px var(--card-cause-border), 0 0 16px -4px var(--card-cause-border)"
-                                : "0 0 0 1px var(--card-effect-border), 0 0 16px -4px var(--card-effect-border)"
+                                ? "0 0 0 1px var(--card-cause-border), 0 0 14px -4px var(--card-cause-border)"
+                                : "0 0 0 1px var(--card-effect-border), 0 0 14px -4px var(--card-effect-border)"
                               : isCascadePeek
                                 ? "0 0 0 2px var(--card-cause-border)"
                                 : undefined,
                           }}
                         >
                           {/* Top Role Badge */}
-                          <div className="flex items-center justify-between gap-1">
+                          <div className="flex items-center justify-between gap-1 shrink-0">
                             <span
-                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md font-mono text-[9px] sm:text-[10px] font-semibold uppercase tracking-wider"
+                              className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded font-mono text-[8.5px] sm:text-[9.5px] font-semibold uppercase tracking-wider leading-none"
                               style={{
                                 backgroundColor: isCause
                                   ? "var(--card-cause-badge-bg)"
@@ -779,25 +850,25 @@ export function CauseEffectGame() {
 
                             {isCascadePeek && (
                               <Eye
-                                className="w-3.5 h-3.5 shrink-0"
+                                className="w-3 h-3 shrink-0"
                                 style={{ color: "var(--card-cause-accent)" }}
                                 aria-hidden="true"
                               />
                             )}
                           </div>
 
-                          {/* Card Prompt Text */}
-                          <div className="my-auto py-1 flex items-center justify-center">
-                            <p className="text-[11px] sm:text-xs font-medium leading-snug text-center text-[var(--sys-color-text-primary)] break-words">
+                          {/* Card Prompt Text — wide & crisp for fast reading */}
+                          <div className="my-auto py-0.5 flex items-center justify-center">
+                            <p className="text-[10.5px] sm:text-xs font-medium leading-tight sm:leading-snug text-center text-[var(--sys-color-text-primary)] break-words">
                               {card.text}
                             </p>
                           </div>
 
                           {/* Bottom Status Footer */}
-                          <div className="h-4 flex items-center justify-center">
+                          <div className="h-3.5 flex items-center justify-center shrink-0">
                             {isLocked ? (
                               <span
-                                className="inline-flex items-center gap-1 font-mono text-[9px] font-semibold uppercase tracking-wider"
+                                className="inline-flex items-center gap-0.5 font-mono text-[8.5px] sm:text-[9px] font-semibold uppercase tracking-wider leading-none"
                                 style={{
                                   color: isCause
                                     ? "var(--card-cause-accent)"
@@ -811,13 +882,33 @@ export function CauseEffectGame() {
                                 <span>LOCKED</span>
                               </span>
                             ) : (
-                              <span className="font-mono text-[9px] uppercase tracking-wider text-[var(--sys-color-text-muted)]">
+                              <span className="font-mono text-[8.5px] uppercase tracking-wider text-[var(--sys-color-text-muted)] leading-none">
                                 {isCause
                                   ? activeTheme.causeLabel
                                   : activeTheme.effectLabel}
                               </span>
                             )}
                           </div>
+
+                          {/* Subtle reading-time countdown hairline on mismatched cards */}
+                          {isMismatch && !prefersReducedMotion && (
+                            <motion.div
+                              key={`dwell-${card.uid}-${moves}`}
+                              initial={{ scaleX: 1 }}
+                              animate={{ scaleX: 0 }}
+                              transition={{
+                                duration: mismatchDwellMs / 1000,
+                                ease: "linear",
+                              }}
+                              style={{
+                                transformOrigin: "left center",
+                                backgroundColor: isCause
+                                  ? "var(--card-cause-border)"
+                                  : "var(--card-effect-border)",
+                              }}
+                              className="absolute inset-x-0 bottom-0 h-[3px] opacity-75"
+                            />
+                          )}
                         </div>
                       </div>
                     </button>
@@ -826,29 +917,38 @@ export function CauseEffectGame() {
               })}
             </div>
 
-            {/* Subtle Legend & Controls Strip Underneath Grid */}
-            <div className="mt-4 pt-3 border-t border-[var(--sys-color-border-subtle)] flex flex-wrap items-center justify-between gap-3">
+            {/* Compact Legend, Reading Hint & Action Controls Underneath Grid */}
+            <div className="mt-2.5 pt-2.5 border-t border-[var(--sys-color-border-subtle)] flex flex-wrap items-center justify-between gap-2 shrink-0">
               <div className="flex flex-wrap items-center gap-3 text-xs text-[var(--sys-color-text-secondary)]">
-                <span className="inline-flex items-center gap-1.5">
-                  <span
-                    className="w-2.5 h-2.5 rounded-sm border"
-                    style={{
-                      backgroundColor: "var(--card-cause-bg)",
-                      borderColor: "var(--card-cause-border)",
-                    }}
-                  />
-                  <span>Cause ({activeTheme.causeLabel})</span>
-                </span>
-                <span className="inline-flex items-center gap-1.5">
-                  <span
-                    className="w-2.5 h-2.5 rounded-sm border"
-                    style={{
-                      backgroundColor: "var(--card-effect-bg)",
-                      borderColor: "var(--card-effect-border)",
-                    }}
-                  />
-                  <span>Effect ({activeTheme.effectLabel})</span>
-                </span>
+                {isShowingMismatch ? (
+                  <span className="text-[var(--sys-color-text-primary)] font-medium">
+                    Not a match — memorise positions, or tap another card to
+                    continue.
+                  </span>
+                ) : (
+                  <>
+                    <span className="inline-flex items-center gap-1.5">
+                      <span
+                        className="w-2.5 h-2.5 rounded-sm border"
+                        style={{
+                          backgroundColor: "var(--card-cause-bg)",
+                          borderColor: "var(--card-cause-border)",
+                        }}
+                      />
+                      <span>Cause ({activeTheme.causeLabel})</span>
+                    </span>
+                    <span className="inline-flex items-center gap-1.5">
+                      <span
+                        className="w-2.5 h-2.5 rounded-sm border"
+                        style={{
+                          backgroundColor: "var(--card-effect-bg)",
+                          borderColor: "var(--card-effect-border)",
+                        }}
+                      />
+                      <span>Effect ({activeTheme.effectLabel})</span>
+                    </span>
+                  </>
+                )}
               </div>
 
               <div className="flex items-center gap-2">
@@ -868,7 +968,7 @@ export function CauseEffectGame() {
                     onClick={handleRestart}
                   >
                     <RotateCcw className="w-3.5 h-3.5" aria-hidden="true" />
-                    <span>Restart deck</span>
+                    <span>Restart</span>
                   </Button>
                 )}
 
@@ -879,17 +979,17 @@ export function CauseEffectGame() {
                     onClick={() => setShowWinModal(true)}
                   >
                     <Trophy className="w-3.5 h-3.5" aria-hidden="true" />
-                    <span>View summary</span>
+                    <span>Summary</span>
                   </Button>
                 )}
               </div>
             </div>
           </section>
 
-          {/* Right Sidebar: Chain Tracker + Sequential Chain Timeline */}
-          <aside className="space-y-4">
+          {/* Right Sidebar: Chain Tracker + Self-Scrolling Chain Timeline (matches board height) */}
+          <aside className="flex flex-col gap-3 min-h-0">
             {/* Chain Multiplier & Cascade Meter Card */}
-            <div className="tonal-card p-4">
+            <div className="tonal-card p-3.5 shrink-0">
               <div className="flex items-center justify-between gap-2">
                 <h2 className="text-sm font-semibold text-[var(--sys-color-text-primary)]">
                   Chain Tracker
@@ -911,13 +1011,13 @@ export function CauseEffectGame() {
                 </span>
               </div>
 
-              <p className="mt-1.5 text-xs text-[var(--sys-color-text-secondary)] leading-relaxed">
+              <p className="mt-1 text-xs text-[var(--sys-color-text-secondary)] leading-snug">
                 {consecutiveMatches === 0
-                  ? "Match consecutive Cause & Effect pairs to build your multiplier. Hit 3x for a Cascade Reveal."
+                  ? "Match consecutive pairs to multiply points. Hit 3x for a Cascade Reveal."
                   : consecutiveMatches < 3
                     ? `${3 - consecutiveMatches} more consecutive ${
                         3 - consecutiveMatches === 1 ? "match" : "matches"
-                      } to flash all remaining Cause cards.`
+                      } to flash remaining Cause cards.`
                     : `Cascade active! Next match earns ${(
                         BASE_MATCH_POINTS *
                         (consecutiveMatches + 1)
@@ -925,13 +1025,13 @@ export function CauseEffectGame() {
               </p>
 
               {/* 3-Step Cascade Progress Pips */}
-              <div className="mt-3.5 grid grid-cols-3 gap-2">
+              <div className="mt-2.5 grid grid-cols-3 gap-1.5">
                 {[1, 2, 3].map((step) => {
                   const filled = cascadeMeterStep >= step;
                   return (
                     <div
                       key={step}
-                      className="rounded-lg border px-2 py-1.5 text-center transition-colors"
+                      className="rounded-lg border px-2 py-1 text-center transition-colors"
                       style={{
                         backgroundColor: filled
                           ? "var(--card-cause-bg)"
@@ -942,7 +1042,7 @@ export function CauseEffectGame() {
                       }}
                     >
                       <span
-                        className="font-mono text-xs font-semibold tabular-nums"
+                        className="font-mono text-[11px] font-semibold tabular-nums"
                         style={{
                           color: filled
                             ? "var(--card-cause-accent)"
@@ -956,7 +1056,7 @@ export function CauseEffectGame() {
                 })}
               </div>
 
-              <div className="mt-3.5">
+              <div className="mt-2.5">
                 <ProgressBar
                   value={lockedPairIds.length}
                   max={TOTAL_PAIRS}
@@ -964,7 +1064,7 @@ export function CauseEffectGame() {
                 />
               </div>
 
-              <div className="mt-3 pt-3 border-t border-[var(--sys-color-border-subtle)] flex items-center justify-between text-xs text-[var(--sys-color-text-muted)]">
+              <div className="mt-2.5 pt-2 border-t border-[var(--sys-color-border-subtle)] flex items-center justify-between text-xs text-[var(--sys-color-text-muted)]">
                 <span>Longest chain</span>
                 <span className="font-mono font-semibold tabular-nums text-[var(--sys-color-text-primary)]">
                   {longestChain > 0 ? `${longestChain}x` : "—"}
@@ -972,9 +1072,9 @@ export function CauseEffectGame() {
               </div>
             </div>
 
-            {/* Sequential Chain Timeline Card */}
-            <div className="tonal-card p-4">
-              <div className="flex items-center justify-between gap-2 mb-3">
+            {/* Sequential Chain Timeline Card (scrolls internally on desktop) */}
+            <div className="tonal-card p-3.5 flex flex-col flex-1 min-h-[180px] lg:min-h-0">
+              <div className="flex items-center justify-between gap-2 mb-2.5 shrink-0">
                 <h2 className="text-sm font-semibold text-[var(--sys-color-text-primary)]">
                   Chain Timeline
                 </h2>
@@ -984,9 +1084,9 @@ export function CauseEffectGame() {
               </div>
 
               {chainTimeline.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-[var(--sys-color-border-subtle)] bg-[var(--sys-color-surface-low)] px-3 py-6 text-center">
+                <div className="flex-1 rounded-xl border border-dashed border-[var(--sys-color-border-subtle)] bg-[var(--sys-color-surface-low)] px-3 py-5 flex flex-col items-center justify-center text-center">
                   <Link2
-                    className="w-5 h-5 mx-auto text-[var(--sys-color-text-muted)] mb-2"
+                    className="w-5 h-5 text-[var(--sys-color-text-muted)] mb-1.5"
                     aria-hidden="true"
                   />
                   <p className="text-xs text-[var(--sys-color-text-secondary)]">
@@ -996,7 +1096,7 @@ export function CauseEffectGame() {
               ) : (
                 <ol
                   aria-label="Matched pairs timeline"
-                  className="space-y-1.5 max-h-[360px] overflow-y-auto pr-1"
+                  className="space-y-1.5 flex-1 min-h-0 overflow-y-auto pr-1"
                 >
                   <AnimatePresence initial={false}>
                     {chainTimeline.map((link, idx) => (
@@ -1004,18 +1104,18 @@ export function CauseEffectGame() {
                         key={link.pairId}
                         initial={{ opacity: 0, y: 8 }}
                         animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.22, ease: "easeOut" }}
+                        transition={{ duration: 0.2, ease: "easeOut" }}
                       >
                         {idx > 0 && (
                           <div className="flex justify-center py-0.5 text-[var(--sys-color-text-muted)]">
                             <ArrowDown
-                              className="w-3.5 h-3.5"
+                              className="w-3 h-3"
                               aria-hidden="true"
                             />
                           </div>
                         )}
-                        <div className="rounded-xl bg-[var(--sys-color-surface-low)] border border-[var(--sys-color-border-subtle)] px-3 py-2">
-                          <div className="flex items-center justify-between gap-2 mb-1">
+                        <div className="rounded-xl bg-[var(--sys-color-surface-low)] border border-[var(--sys-color-border-subtle)] px-2.5 py-2">
+                          <div className="flex items-center justify-between gap-2 mb-0.5">
                             <span className="font-mono text-[10px] font-semibold uppercase tracking-wider text-[var(--sys-color-text-muted)]">
                               Pair {link.step}
                             </span>
